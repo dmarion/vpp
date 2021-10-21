@@ -343,7 +343,6 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	: "memory");
     }
 #elif defined(CLIB_HAVE_VEC256)
-#if 1
       u8x32 ymm0, ymm1, ymm2, ymm3;
       u64 ctr, tmp;
       asm volatile(
@@ -381,67 +380,6 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	  [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n), [ctr] "+&r"(ctr), [tmp] "+&r"(tmp)
 	:
 	: "memory");
-#else
-      u8x32 ymm0, ymm1, ymm2;
-      asm volatile(
-	/* copy 512 bytes using 32-byte load/stores, n -= 512,
-	 * dst += 512, src += 512 */
-	"vmovdqu	(%[src]), %[ymm0]	\n\t" /* load 0, 2, 4 */
-	"subq		$0x80,%[n]		\n\t" /* n -= 512 */
-	"vmovdqu	0x40(%[src]), %[ymm1]	\n\t"
-	"vmovdqu	0x80(%[src]), %[ymm2]	\n\t"
-
-	"vmovdqa	%[ymm0], (%[dst])	\n\t" /* load 1, store 0-1 */
-	"vmovdqu	0x20(%[src]), %[ymm0]	\n\t"
-	"vmovdqa	%[ymm0], 0x20(%[dst])	\n\t"
-
-	"vmovdqu	0xc0(%[src]), %[ymm0]	\n\t" /* load 6 */
-
-	"vmovdqa	%[ymm1], 0x40(%[dst])	\n\t" /* load 3, store 2-3 */
-	"vmovdqu	0x60(%[src]), %[ymm1]	\n\t"
-	"vmovdqa	%[ymm1], 0x60(%[dst])	\n\t"
-
-	"vmovdqu	0x100(%[src]), %[ymm1]	\n\t" /* load 8 */
-
-	"vmovdqa	%[ymm2], 0x80(%[dst])	\n\t" /* load 5, store 4-5 */
-	"vmovdqu	0xa0(%[src]), %[ymm2]	\n\t"
-	"vmovdqa	%[ymm2], 0xa0(%[dst])	\n\t"
-
-	"vmovdqu	0x140(%[src]), %[ymm2]	\n\t" /* load 10 */
-
-	"vmovdqa	%[ymm0], 0xc0(%[dst])	\n\t" /* load 7, store 6-7 */
-	"vmovdqu	0xe0(%[src]), %[ymm0]	\n\t"
-	"vmovdqa	%[ymm0], 0xe0(%[dst])	\n\t"
-
-	"vmovdqu	0x180(%[src]), %[ymm0]	\n\t" /* load 12 */
-
-	"vmovdqa	%[ymm1], 0x100(%[dst])	\n\t" /* load 9, store 8-9 */
-	"vmovdqu	0x120(%[src]), %[ymm1]	\n\t"
-	"vmovdqa	%[ymm1], 0x120(%[dst])	\n\t"
-
-	"vmovdqu	0x1c0(%[src]), %[ymm1]	\n\t" /* load 14,11  */
-	"vmovdqa	%[ymm2], 0x140(%[dst])	\n\t"
-	"vmovdqu	0x160(%[src]), %[ymm2]	\n\t" /* store 10-11 */
-	"vmovdqa	%[ymm2], 0x160(%[dst])	\n\t"
-
-	"vmovdqa	%[ymm0], 0x180(%[dst])	\n\t" /* store 12 */
-
-	"vmovdqu	0x1a0(%[src]), %[ymm0]	\n\t" /* load 13,15 */
-	"vmovdqu	0x1e0(%[src]), %[ymm2]	\n\t"
-
-	"addq		$0x200, %[src]		\n\t" /* src += 512 */
-
-	"vmovdqa	%[ymm0], 0x1a0(%[dst])	\n\t" /* store 13-15 */
-	"vmovdqa	%[ymm1], 0x1c0(%[dst])	\n\t"
-	"vmovdqa	%[ymm2], 0x1e0(%[dst])	\n\t"
-
-	"addq		$0x200, %[dst]		\n\t" /* dst += 512 */
-
-	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
-	  [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n)
-	:
-	: "memory");
-#endif
 #else
   while (PREDICT_TRUE (n >= block_bytes))
     {
@@ -507,9 +445,9 @@ last:
 
   if (PREDICT_TRUE (n))
     {
+#ifdef CLIB_HAVE_VEC512
       off = n - vec_bytes;
       u64 r0;
-#ifdef CLIB_HAVE_VEC512
       skip = ((n >> 6) * 16);
       u8x64 zmm0;
       asm volatile(
@@ -552,6 +490,7 @@ last:
 	: "memory");
 
 #elif defined(CLIB_HAVE_VEC256)
+      u64 r0;
       skip = (n >> 5) * 16;
       u8x32 ymm0;
       asm volatile(
@@ -581,6 +520,8 @@ last:
 	: [dst] "D"(d), [src] "S"(s), [skip] "r"(skip), [n] "r"(n)
 	: "memory");
 #else
+      off = n - vec_bytes;
+      u64 r0;
       skip = n & ~0x0f;
       u8x16 xmm0;
       asm volatile(
