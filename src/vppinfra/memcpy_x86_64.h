@@ -236,7 +236,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
   const u16 block_bytes = 256;
 #endif
   u8 *d = (u8 *) dst, *s = (u8 *) src;
-  u64 off, skip;
+  u64 off;
 
   /* emit minimal number of instructions for cases where n is compile-time
    * constant */
@@ -349,11 +349,11 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
     }
 #elif defined(CLIB_HAVE_VEC256)
       u8x32 ymm0, ymm1, ymm2, ymm3;
-      u64 ctr, tmp;
+      u64 ctr, r0;
       asm volatile(
-	"mov %[n], %[tmp]				\n\t"
-	"xorb		%b[tmp], %b[tmp]		\n\t"
-	"test		%[tmp], %[tmp]			\n\t"
+	"mov %[n], %[r0]				\n\t"
+	"xorb		%b[r0], %b[r0]			\n\t"
+	"test		%[r0], %[r0]			\n\t"
 	"jz 		2f				\n\t"
 	"xor %[ctr], %[ctr]				\n\t"
 	"1:						\n\t"
@@ -374,7 +374,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"vmovdqa	%[ymm2], 0xc0(%[dst],%[ctr],1)	\n\t"
 	"vmovdqa	%[ymm3], 0xe0(%[dst],%[ctr],1)	\n\t"
 	"addq		$0x100,%[ctr]			\n\t"
-	"cmp		%[tmp], %[ctr]			\n\t"
+	"cmp		%[r0], %[ctr]			\n\t"
 	"jne		1b				\n\t"
 	"subq		%[ctr], %[n]			\n\t"
 	"addq		%[ctr], %[src]			\n\t"
@@ -382,17 +382,19 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"2:						\n\t"
 
 	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2), [ymm3] "=&x"(ymm3),
-	  [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n), [ctr] "+&r"(ctr), [tmp] "+&r"(tmp)
+	  [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n), [ctr] "+&r"(ctr), [r0] "+&r"(r0)
 	:
 	: "memory");
   if (PREDICT_TRUE (n))
     {
-      u64 r0;
-      skip = (n >> 5) * 16;
-      u8x32 ymm0;
+      u64 r1;
       asm volatile(
+	"		movq		%[n], %[r1]			\n\t"
+	"		shrq		$1, %[r1]			\n\t"
+	//"		shlq		$4, %[r1]			\n\t"
+	"		andq		$0xfffffffffffffff0, %[r1]	\n\t"
 	"		lea		1f(%%rip), %[r0]		\n\t"
-	"		subq		%[skip], %[r0]			\n\t"
+	"		subq		%[r1], %[r0]			\n\t"
 	"		jmp		*%[r0]				\n\t"
 	".align 16							\n\t"
 	"		vmovdqu		0xc0(%[src]), %[ymm0]		\n\t"
@@ -413,8 +415,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"		vmovdqu		-0x20(%[src],%[n]), %[ymm0]	\n\t"
 	"		vmovdqu		%[ymm0], -0x20(%[dst],%[n])	\n\t"
 
-	: [r0] "=&r"(r0), [ymm0] "=&x"(ymm0)
-	: [dst] "D"(d), [src] "S"(s), [skip] "r"(skip), [n] "r"(n)
+	: [r0] "=&r"(r0), [r1] "=&r"(r1), [ymm0] "=&x"(ymm0)
+	: [dst] "D"(d), [src] "S"(s), [n] "r"(n)
 	: "memory");
       return dst;
     }
@@ -486,7 +488,7 @@ last:
     {
       off = n - vec_bytes;
       u64 r0;
-      skip = ((n >> 6) * 16);
+      u64 skip = ((n >> 6) * 16);
       u8x64 zmm0;
       asm volatile(
 	"lea		1f(%%rip), %[r0]	\n\t"
@@ -535,7 +537,7 @@ last:
     {
       off = n - vec_bytes;
       u64 r0;
-      skip = n & ~0x0f;
+      u64 skip = n & ~0x0f;
       u8x16 xmm0;
       asm volatile(
 	"lea 1f(%%rip), %[r0]\n"
