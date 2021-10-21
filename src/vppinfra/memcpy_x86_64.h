@@ -386,11 +386,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"		je		4f				\n\t"
 
 	"		movq		%[n], %[r1]			\n\t"
-	"		subq		%[ctr], %[r1]			\n\t"
-	//"		shrq		$1, %[r1]			\n\t"
-	//"		andq		$0xfffffffffffffff0, %[r1]	\n\t"
-	"		shrq		$5, %[r1]			\n\t"
-	"		addq		%[r1], %[r1]			\n\t"
+	"		andq		$0x0e0, %[r1]			\n\t"
+	"		shrq		$4, %[r1]			\n\t"
 	"		leaq		(%[r1],%[r1],8), %[r1]		\n\t"
 
 	"		lea		3f(%%rip), %[r0]		\n\t"
