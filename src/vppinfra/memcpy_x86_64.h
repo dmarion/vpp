@@ -385,13 +385,13 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	  [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n), [ctr] "+&r"(ctr), [r0] "+&r"(r0)
 	:
 	: "memory");
-  if (PREDICT_TRUE (n))
-    {
+
       u64 r1;
       asm volatile(
+	"		test		%[n], %[n]			\n\t"
+	"		je		2f				\n\t"
 	"		movq		%[n], %[r1]			\n\t"
 	"		shrq		$1, %[r1]			\n\t"
-	//"		shlq		$4, %[r1]			\n\t"
 	"		andq		$0xfffffffffffffff0, %[r1]	\n\t"
 	"		lea		1f(%%rip), %[r0]		\n\t"
 	"		subq		%[r1], %[r0]			\n\t"
@@ -414,12 +414,12 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"1:								\n\t"
 	"		vmovdqu		-0x20(%[src],%[n]), %[ymm0]	\n\t"
 	"		vmovdqu		%[ymm0], -0x20(%[dst],%[n])	\n\t"
+	"2:								\n\t"
 
 	: [r0] "=&r"(r0), [r1] "=&r"(r1), [ymm0] "=&x"(ymm0)
 	: [dst] "D"(d), [src] "S"(s), [n] "r"(n)
 	: "memory");
       return dst;
-    }
 #else
   while (PREDICT_TRUE (n >= block_bytes))
     {
