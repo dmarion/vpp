@@ -350,6 +350,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 #elif defined(CLIB_HAVE_VEC256)
       u8x32 ymm0, ymm1, ymm2, ymm3;
       u64 ctr, r0;
+      u64 r1;
       asm volatile(
 	"mov %[n], %[r0]				\n\t"
 	"xorb		%b[r0], %b[r0]			\n\t"
@@ -381,19 +382,12 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"addq		%[ctr], %[dst]			\n\t"
 	"2:						\n\t"
 
-	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2), [ymm3] "=&x"(ymm3),
-	  [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n), [ctr] "+&r"(ctr), [r0] "+&r"(r0)
-	:
-	: "memory");
-
-      u64 r1;
-      asm volatile(
 	"		test		%[n], %[n]			\n\t"
-	"		je		2f				\n\t"
+	"		je		4f				\n\t"
 	"		movq		%[n], %[r1]			\n\t"
 	"		shrq		$1, %[r1]			\n\t"
 	"		andq		$0xfffffffffffffff0, %[r1]	\n\t"
-	"		lea		1f(%%rip), %[r0]		\n\t"
+	"		lea		3f(%%rip), %[r0]		\n\t"
 	"		subq		%[r1], %[r0]			\n\t"
 	"		jmp		*%[r0]				\n\t"
 	".align 16							\n\t"
@@ -411,14 +405,16 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"%{disp32%}	vmovdqu		%[ymm0], 0x20(%[dst])		\n\t"
 	"%{disp32%}	vmovdqu		0x00(%[src]), %[ymm0]		\n\t"
 	"%{disp32%}	vmovdqu		%[ymm0], 0x00(%[dst])		\n\t"
-	"1:								\n\t"
+	"3:								\n\t"
 	"		vmovdqu		-0x20(%[src],%[n]), %[ymm0]	\n\t"
 	"		vmovdqu		%[ymm0], -0x20(%[dst],%[n])	\n\t"
-	"2:								\n\t"
-
-	: [r0] "=&r"(r0), [r1] "=&r"(r1), [ymm0] "=&x"(ymm0)
-	: [dst] "D"(d), [src] "S"(s), [n] "r"(n)
+	"4:								\n\t"
+	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
+	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
+	  [ctr] "+&r"(ctr), [r0] "+&r"(r0), [r1] "+&r"(r1)
+	:
 	: "memory");
+
       return dst;
 #else
   while (PREDICT_TRUE (n >= block_bytes))
