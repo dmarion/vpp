@@ -251,7 +251,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
   if (PREDICT_TRUE (n < vec_bytes))
     {
 #if defined(CLIB_HAVE_VEC512)
-      if (n > 32)
+      if (n >= 32)
 	{
 	  *(u8x32u *) d = *(u8x32u *) s;
 	  *(u8x32u *) (d + n - 32) = *(u8x32u *) (s + n - 32);
@@ -259,7 +259,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	}
 #endif
 #if defined(CLIB_HAVE_VEC256_MASK_LOAD_STORE)
-      u32 mask = pow2_mask (n);
+      //u32 mask = pow2_mask (n);
+      u32 mask = ~(0xffffffff << n);
       u8x32_mask_store (u8x32_mask_load_zero (s, mask), d, mask);
 #else
       if (PREDICT_TRUE (n >= 8))
@@ -371,15 +372,15 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
       u8x32 ymm0, ymm1, ymm2, ymm3;
       u64 off, r0, r1;
       asm volatile(
-#if 1
-	"xor		%[off], %[off]			\n\t"
-	"cmp		$0xff, %[n]			\n\t"
+	"vmovdqu	(%[src]), %[ymm0]		\n\t"
+	"vmovdqu	%[ymm0], (%[dst])		\n\t"
+	"mov		$0x20, %[off]			\n\t"
+	"cmp		$0x11f, %[n]			\n\t"
 	"jbe		.L_last_%=			\n\t"
+#if 0
 	"mov		%[n], %[r0]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
 #else
-	"vmovdqu	(%[src]), %[ymm0]		\n\t"
-	"vmovdqu	%[ymm0], (%[dst])		\n\t"
 	"mov		%[dst], %[r0]			\n\t"
 	"and		$0x1f, %[r0]			\n\t"
 	"mov		$0x20, %[off]			\n\t"
@@ -387,8 +388,6 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"mov		%[n], %[r0]			\n\t"
 	"sub		%[off], %[r0]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
-	"test		%[r0], %[r0]			\n\t"
-	"jz		.L_last_%=			\n\t"
 	"add		%[off], %[r0]			\n\t"
 #endif
 	/* main 256-byte copy loop */
@@ -430,10 +429,11 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 *     ((n & 0xe0) >> 4) * 9
 	 *   - use LEA 8 * x + x to multiply by 9
 	 */
-	"		movq		%[n], %[r1]			\n\t"
-	"		andq		$0xe0, %[r1]			\n\t"
-	"		shrq		$4, %[r1]			\n\t"
-	"		leaq		(%[r1],%[r1],8), %[r1]		\n\t"
+	"		mov		%[n], %[r1]			\n\t"
+	"		sub		%[off], %[r1]			\n\t"
+	"		and		$0xe0, %[r1]			\n\t"
+	"		shr		$4, %[r1]			\n\t"
+	"		lea		(%[r1],%[r1],8), %[r1]		\n\t"
 
 	/* calculate start jump offset from RIP and subtract jump offset
 	 * calculated above
