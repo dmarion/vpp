@@ -415,6 +415,11 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"9:								\n\t"
 	"		vmovdqu -0x20(%[src],%[n]),%[ymm0]		\n\t"
 	"		vmovdqu %[ymm0], -0x20(%[dst],%[n])		\n\t"
+	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
+	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
+	  [off] "+&r"(off), [r0] "+&r"(r0)
+	:
+	: "memory");
 #else
 	/* Calculate jump offset.
 	 * VEX encoded unaligned move with base, offset and 32 bit
@@ -457,13 +462,13 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * */
 	"		vmovdqu		-0x20(%[src],%[n]), %[ymm0]	\n\t"
 	"		vmovdqu		%[ymm0], -0x20(%[dst],%[n])	\n\t"
-#endif
 	"4:								\n\t"
 	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
 	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
 	  [off] "+&r"(off), [r0] "+&r"(r0), [r1] "+&r"(r1)
 	:
 	: "memory");
+#endif
 
       return dst;
     }
