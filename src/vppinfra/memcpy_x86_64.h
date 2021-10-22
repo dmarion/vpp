@@ -351,7 +351,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
   if (1)
     {
       u8x32 ymm0, ymm1, ymm2, ymm3;
-      u64 off, r0, r1;
+      u64 off, r0;
       asm volatile(
 	/* set offset to 0 */
 	"		xor		%[off], %[off]			\n\t"
@@ -421,6 +421,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	:
 	: "memory");
 #else
+	u64 r1;
 	/* Calculate jump offset.
 	 * VEX encoded unaligned move with base, offset and 32 bit
 	 * displacement takes 9 bytes so we need to jump back 18 bytes
