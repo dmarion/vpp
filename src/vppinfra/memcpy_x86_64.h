@@ -404,7 +404,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	/* calculate start jump offset from RIP and subtract jump offset
 	 * calculated above
-	 * */
+	 */
 	"		lea		3f(%%rip), %[r0]		\n\t"
 	"		subq		%[r1], %[r0]			\n\t"
 	"		jmp		*%[r0]				\n\t"
