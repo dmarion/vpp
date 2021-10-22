@@ -348,77 +348,95 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	: "memory");
     }
 #elif defined(CLIB_HAVE_VEC256)
+  if (1)
+    {
       u8x32 ymm0, ymm1, ymm2, ymm3;
-      u64 ctr, r0;
-      u64 r1;
+      u64 off, r0, r1;
       asm volatile(
-	"mov %[n], %[r0]				\n\t"
-	"xor %[ctr], %[ctr]				\n\t"
-	"xorb		%b[r0], %b[r0]			\n\t"
-	"test		%[r0], %[r0]			\n\t"
-	"jz 		2f				\n\t"
-	"1:						\n\t"
-	"vmovdqu	0x00(%[src],%[ctr]), %[ymm0]	\n\t"
-	"vmovdqu	0x20(%[src],%[ctr]), %[ymm1]	\n\t"
-	"vmovdqu	0x40(%[src],%[ctr]), %[ymm2]	\n\t"
-	"vmovdqu	0x60(%[src],%[ctr]), %[ymm3]	\n\t"
-	"vmovdqa	%[ymm0], 0x00(%[dst],%[ctr])	\n\t"
-	"vmovdqa	%[ymm1], 0x20(%[dst],%[ctr])	\n\t"
-	"vmovdqa	%[ymm2], 0x40(%[dst],%[ctr])	\n\t"
-	"vmovdqa	%[ymm3], 0x60(%[dst],%[ctr])	\n\t"
-	"vmovdqu	0x80(%[src],%[ctr]), %[ymm0]	\n\t"
-	"vmovdqu	0xa0(%[src],%[ctr]), %[ymm1]	\n\t"
-	"vmovdqu	0xc0(%[src],%[ctr]), %[ymm2]	\n\t"
-	"vmovdqu	0xe0(%[src],%[ctr]), %[ymm3]	\n\t"
-	"vmovdqa	%[ymm0], 0x80(%[dst],%[ctr])	\n\t"
-	"vmovdqa	%[ymm1], 0xa0(%[dst],%[ctr])	\n\t"
-	"vmovdqa	%[ymm2], 0xc0(%[dst],%[ctr])	\n\t"
-	"vmovdqa	%[ymm3], 0xe0(%[dst],%[ctr])	\n\t"
-	"addq		$0x100,%[ctr]			\n\t"
-	"cmp		%[r0], %[ctr]			\n\t"
-	"jne		1b				\n\t"
-	//"subq		%[ctr], %[n]			\n\t"
-	//"addq		%[ctr], %[src]			\n\t"
-	//"addq		%[ctr], %[dst]			\n\t"
-	"2:						\n\t"
+	/* set offset to 0, calculate number of bytes in 256-byte blocks */
+	"		mov		%[n], %[r0]			\n\t"
+	"		xor		%[off], %[off]			\n\t"
+	"		xorb		%b[r0], %b[r0]			\n\t"
+	/* skip main loop if number of bytes is < 256 */
+	"		test		%[r0], %[r0]			\n\t"
+	"		jz 		2f				\n\t"
+	"1:								\n\t"
+	/* main 256-byte copy loop */
+	"		vmovdqu		0x00(%[src],%[off]), %[ymm0]	\n\t"
+	"		vmovdqu		0x20(%[src],%[off]), %[ymm1]	\n\t"
+	"		vmovdqu		0x40(%[src],%[off]), %[ymm2]	\n\t"
+	"		vmovdqu		0x60(%[src],%[off]), %[ymm3]	\n\t"
+	"		vmovdqa		%[ymm0], 0x00(%[dst],%[off])	\n\t"
+	"		vmovdqa		%[ymm1], 0x20(%[dst],%[off])	\n\t"
+	"		vmovdqa		%[ymm2], 0x40(%[dst],%[off])	\n\t"
+	"		vmovdqa		%[ymm3], 0x60(%[dst],%[off])	\n\t"
+	"		vmovdqu		0x80(%[src],%[off]), %[ymm0]	\n\t"
+	"		vmovdqu		0xa0(%[src],%[off]), %[ymm1]	\n\t"
+	"		vmovdqu		0xc0(%[src],%[off]), %[ymm2]	\n\t"
+	"		vmovdqu		0xe0(%[src],%[off]), %[ymm3]	\n\t"
+	"		vmovdqa		%[ymm0], 0x80(%[dst],%[off])	\n\t"
+	"		vmovdqa		%[ymm1], 0xa0(%[dst],%[off])	\n\t"
+	"		vmovdqa		%[ymm2], 0xc0(%[dst],%[off])	\n\t"
+	"		vmovdqa		%[ymm3], 0xe0(%[dst],%[off])	\n\t"
+	"		addq		$0x100,%[off]			\n\t"
+	"		cmp		%[r0], %[off]			\n\t"
+	"		jne		1b				\n\t"
+	"2:								\n\t"
 
-	"		cmp		%[ctr], %[n]			\n\t"
+	/* check if there is more bytes to copy (256 > n > 0) */
+	"		cmp		%[off], %[n]			\n\t"
 	"		je		4f				\n\t"
 
+	/* Calculate jump offset.
+	 * VEX encoded unaligned move with base, offset and 32 bit
+	 * displacement takes 9 bytes so we need to jump back 18 bytes
+	 * for each 32-byte load/store needed
+	 * Formula is:
+	 *   - bits 5-7 from n represent number od 32-byte blocks
+	 *   - ((n & 0xe0) >> 5) * 18 =
+	 *     ((n & 0xe0) >> 4) * 9
+	 *   - use LEA 8 * x + x to multiply by 9
+	 */
 	"		movq		%[n], %[r1]			\n\t"
-	"		andq		$0x0e0, %[r1]			\n\t"
+	"		andq		$0xe0, %[r1]			\n\t"
 	"		shrq		$4, %[r1]			\n\t"
 	"		leaq		(%[r1],%[r1],8), %[r1]		\n\t"
 
+	/* calculate start jump offset from RIP and subtract jump offset
+	 * calculated above
+	 * */
 	"		lea		3f(%%rip), %[r0]		\n\t"
 	"		subq		%[r1], %[r0]			\n\t"
 	"		jmp		*%[r0]				\n\t"
-	//".align 16							\n\t"
-	"		vmovdqu		0xc0(%[src],%[ctr]), %[ymm0]	\n\t"
-	"		vmovdqu		%[ymm0], 0xc0(%[dst],%[ctr])	\n\t"
-	"		vmovdqu		0xa0(%[src],%[ctr]), %[ymm0]	\n\t"
-	"		vmovdqu		%[ymm0], 0xa0(%[dst],%[ctr])	\n\t"
-	"		vmovdqu		0x80(%[src],%[ctr]), %[ymm0]	\n\t"
-	"		vmovdqu		%[ymm0], 0x80(%[dst],%[ctr])	\n\t"
-	"%{disp32%}	vmovdqu		0x60(%[src],%[ctr]), %[ymm0]	\n\t"
-	"%{disp32%}	vmovdqu		%[ymm0], 0x60(%[dst],%[ctr])	\n\t"
-	"%{disp32%}	vmovdqu		0x40(%[src],%[ctr]), %[ymm0]	\n\t"
-	"%{disp32%}	vmovdqu		%[ymm0], 0x40(%[dst],%[ctr])	\n\t"
-	"%{disp32%}	vmovdqu		0x20(%[src],%[ctr]), %[ymm0]	\n\t"
-	"%{disp32%}	vmovdqu		%[ymm0], 0x20(%[dst],%[ctr])	\n\t"
-	"%{disp32%}	vmovdqu		0x00(%[src],%[ctr]), %[ymm0]	\n\t"
-	"%{disp32%}	vmovdqu		%[ymm0], 0x00(%[dst],%[ctr])	\n\t"
+	"		vmovdqu		0xc0(%[src],%[off]), %[ymm0]	\n\t"
+	"		vmovdqu		%[ymm0], 0xc0(%[dst],%[off])	\n\t"
+	"		vmovdqu		0xa0(%[src],%[off]), %[ymm0]	\n\t"
+	"		vmovdqu		%[ymm0], 0xa0(%[dst],%[off])	\n\t"
+	"		vmovdqu		0x80(%[src],%[off]), %[ymm0]	\n\t"
+	"		vmovdqu		%[ymm0], 0x80(%[dst],%[off])	\n\t"
+	"%{disp32%}	vmovdqu		0x60(%[src],%[off]), %[ymm0]	\n\t"
+	"%{disp32%}	vmovdqu		%[ymm0], 0x60(%[dst],%[off])	\n\t"
+	"%{disp32%}	vmovdqu		0x40(%[src],%[off]), %[ymm0]	\n\t"
+	"%{disp32%}	vmovdqu		%[ymm0], 0x40(%[dst],%[off])	\n\t"
+	"%{disp32%}	vmovdqu		0x20(%[src],%[off]), %[ymm0]	\n\t"
+	"%{disp32%}	vmovdqu		%[ymm0], 0x20(%[dst],%[off])	\n\t"
+	"%{disp32%}	vmovdqu		0x00(%[src],%[off]), %[ymm0]	\n\t"
+	"%{disp32%}	vmovdqu		%[ymm0], 0x00(%[dst],%[off])	\n\t"
 	"3:								\n\t"
+	/* copy bytes from n-32 to n-1 - this code assumes that n is
+	 * always >= 32
+	 * */
 	"		vmovdqu		-0x20(%[src],%[n]), %[ymm0]	\n\t"
 	"		vmovdqu		%[ymm0], -0x20(%[dst],%[n])	\n\t"
 	"4:								\n\t"
 	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
 	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
-	  [ctr] "+&r"(ctr), [r0] "+&r"(r0), [r1] "+&r"(r1)
+	  [off] "+&r"(off), [r0] "+&r"(r0), [r1] "+&r"(r1)
 	:
 	: "memory");
 
       return dst;
+    }
 #else
   while (PREDICT_TRUE (n >= block_bytes))
     {
