@@ -299,13 +299,43 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 #ifdef CLIB_HAVE_VEC512
   if (PREDICT_FALSE (n < block_bytes))
     goto last;
-#endif
-#ifndef CLIB_HAVE_VEC256
+#elif defined(CLIB_HAVE_VEC256)
+  if (PREDICT_FALSE (n < 256))
+    {
+      dv[0] = sv[0];
+      if (n <= 64)
+	{
+	  dv = (__typeof__ (dv)) ((u8 *) dst - 1 * vec_bytes + n);
+	  sv = (__typeof__ (sv)) ((u8 *) src - 1 * vec_bytes + n);
+          dv[0] = sv[0];
+          goto done;
+	}
+      dv[1] = sv[1];
+      if (n <= 128)
+	{
+	  dv = (__typeof__ (dv)) ((u8 *) dst - 2 * vec_bytes + n);
+	  sv = (__typeof__ (sv)) ((u8 *) src - 2 * vec_bytes + n);
+          dv[0] = sv[0];
+          dv[1] = sv[1];
+          goto done;
+	}
+
+      dv[2] = sv[2];
+      dv[3] = sv[3];
+      dv = (__typeof__ (dv)) ((u8 *) dst - 4 * vec_bytes + n);
+      sv = (__typeof__ (sv)) ((u8 *) src - 4 * vec_bytes + n);
+      dv[0] = sv[0];
+      dv[1] = sv[1];
+      dv[2] = sv[2];
+      dv[3] = sv[3];
+      goto done;
+    }
+#else
   if (PREDICT_FALSE (n < block_bytes))
     goto last;
 #endif
 
-  if ((off = (uword) d & (vec_bytes - 1)))
+  if (n > 128 && (off = (uword) d & (vec_bytes - 1)))
     {
       /* dst pointer is not aligned */
       off = vec_bytes - off;
@@ -353,13 +383,39 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
       u8x32 ymm0, ymm1, ymm2, ymm3;
       u64 off, r0, r1;
       asm volatile(
+	"		cmp		$0xff,%[n]			\n\t"
+	"		ja		5f				\n\t"
+	"		vmovdqu 0x00(%[src]),%[ymm0]			\n\t"
+	"		vmovdqu %[ymm0], 0x00(%[dst])			\n\t"
+	"		cmp		$0x40,%[n]			\n\t"
+	"		jbe		6f				\n\t"
+	"		vmovdqu 0x20(%[src]),%[ymm0]			\n\t"
+	"		vmovdqu %[ymm0], 0x20(%[dst])			\n\t"
+	"		cmp		$0x80,%[n]			\n\t"
+	"		jbe		7f				\n\t"
+	"		vmovdqu 0x40(%[src]),%[ymm0]			\n\t"
+	"		vmovdqu %[ymm0], 0x40(%[dst])			\n\t"
+	"		vmovdqu 0x60(%[src]),%[ymm0]			\n\t"
+	"		vmovdqu %[ymm0], 0x60(%[dst])			\n\t"
+	"		vmovdqu -0x80(%[src],%[n]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], -0x80(%[dst],%[n])		\n\t"
+	"		vmovdqu -0x60(%[src],%[n]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], -0x60(%[dst],%[n])		\n\t"
+	"7:								\n\t"
+	"		vmovdqu -0x40(%[src],%[n]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], -0x40(%[dst],%[n])		\n\t"
+	"6:								\n\t"
+	"		vmovdqu -0x20(%[src],%[n]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], -0x20(%[dst],%[n])		\n\t"
+	"		jmp	4f					\n\t"
 	/* set offset to 0, calculate number of bytes in 256-byte blocks */
+	"5:								\n\t"
 	"		mov		%[n], %[r0]			\n\t"
 	"		xor		%[off], %[off]			\n\t"
 	"		xorb		%b[r0], %b[r0]			\n\t"
 	/* skip main loop if number of bytes is < 256 */
-	"		test		%[r0], %[r0]			\n\t"
-	"		jz 		2f				\n\t"
+	//"		test		%[r0], %[r0]			\n\t"
+	//"		jz		2f				\n\t"
 	"1:								\n\t"
 	/* main 256-byte copy loop */
 	"		vmovdqu		0x00(%[src],%[off]), %[ymm0]	\n\t"
@@ -387,6 +443,32 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"		cmp		%[off], %[n]			\n\t"
 	"		je		4f				\n\t"
 
+#if 1
+	"		cmp		$0x20,%b[n]			\n\t"
+	"		jbe		9f				\n\t"
+	"		vmovdqu		0x00(%[src],%[off]), %[ymm0]	\n\t"
+	"		vmovdqa		%[ymm0], 0x00(%[dst],%[off])	\n\t"
+	"		cmp		$0x40,%b[n]			\n\t"
+	"		jbe		9f				\n\t"
+	"		vmovdqu 0x20(%[src],%[off]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], 0x20(%[dst],%[off])		\n\t"
+	"		cmp		$0x80,%b[n]			\n\t"
+	"		jbe		8f				\n\t"
+	"		vmovdqu 0x40(%[src],%[off]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], 0x40(%[dst],%[off])		\n\t"
+	"		vmovdqu 0x60(%[src],%[off]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], 0x60(%[dst],%[off])		\n\t"
+	"		vmovdqu -0x80(%[src],%[n]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], -0x80(%[dst],%[n])		\n\t"
+	"		vmovdqu -0x60(%[src],%[n]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], -0x60(%[dst],%[n])		\n\t"
+	"8:								\n\t"
+	"		vmovdqu -0x40(%[src],%[n]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], -0x40(%[dst],%[n])		\n\t"
+	"9:								\n\t"
+	"		vmovdqu -0x20(%[src],%[n]),%[ymm0]		\n\t"
+	"		vmovdqu %[ymm0], -0x20(%[dst],%[n])		\n\t"
+#else
 	/* Calculate jump offset.
 	 * VEX encoded unaligned move with base, offset and 32 bit
 	 * displacement takes 9 bytes so we need to jump back 18 bytes
@@ -428,6 +510,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * */
 	"		vmovdqu		-0x20(%[src],%[n]), %[ymm0]	\n\t"
 	"		vmovdqu		%[ymm0], -0x20(%[dst],%[n])	\n\t"
+#endif
 	"4:								\n\t"
 	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
 	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
