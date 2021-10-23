@@ -374,6 +374,10 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	/* copy 1st 32 bytes */
 	"vmovdqu	(%[src]), %[ymm0]		\n\t"
 	"vmovdqu	%[ymm0], (%[dst])		\n\t"
+	"vmovdqu	-0x20(%[src],%[n]), %[ymm0]	\n\t"
+	"vmovdqu	%[ymm0], -0x20(%[dst],%[n])	\n\t"
+	"cmp		$0x3f,%[n]			\n\t"
+	"jbe		.L_done_%=			\n\t"
 	"mov		$0x20, %k[off]			\n\t"
 
 	/* do we need to visit main loop */
@@ -426,8 +430,6 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * for each 32-byte load/store needed
 	 */
 #if 1
-	"		vmovdqu		-0x20(%[src],%[n]), %[ymm0]	\n\t"
-	"		vmovdqu		%[ymm0], -0x20(%[dst],%[n])	\n\t"
 	"sub		%[off], %[n]                   \n\t"
 	"and		$0xe0, %[n]                    \n\t"
 	"shr		$4, %[n]                       \n\t"
