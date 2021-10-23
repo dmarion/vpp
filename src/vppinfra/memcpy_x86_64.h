@@ -413,35 +413,26 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"cmp		%[r0], %[off]			\n\t"
 	"jne		.L_more_%=			\n\t"
 
+	/* last < 256 bytes */
+	".L_last_%=:					\n\t"
 	/* check if there is more bytes to copy (256 > n > 0) */
 	"cmp		%[off],%[n]			\n\t"
 	"je		.L_done_%=			\n\t"
 
-	/* last < 256 bytes */
-	".L_last_%=:					\n\t"
 #if 1
 	/* Calculate jump offset.
 	 * VEX encoded unaligned move with base, offset and 32 bit
 	 * displacement takes 9 bytes so we need to jump back 18 bytes
 	 * for each 32-byte load/store needed
-	 * Formula is:
-	 *   - bits 5-7 from n represent number od 32-byte blocks
-	 *   - ((n & 0xe0) >> 5) * 18 =
-	 *     ((n & 0xe0) >> 4) * 9
-	 *   - use LEA 8 * x + x to multiply by 9
 	 */
-	"		mov		%[n], %[r1]			\n\t"
-	"		sub		%[off], %[r1]			\n\t"
-	"		and		$0xe0, %[r1]			\n\t"
-	"		shr		$4, %[r1]			\n\t"
-	"		lea		(%[r1],%[r1],8), %[r1]		\n\t"
-
-	/* calculate start jump offset from RIP and subtract jump offset
-	 * calculated above
-	 */
-	"		lea		3f(%%rip), %[r0]		\n\t"
-	"		sub		%[r1], %[r0]			\n\t"
+	"		mov		%[off], %[r0]			\n\t"
+	"		sub		%[n], %[r0]			\n\t"
+	"		sar		$5, %[r0]			\n\t"
+	"		lea		(%[r0],%[r0],8), %[r0]		\n\t"
+	"		lea		3f(%%rip), %[r1]		\n\t"
+	"		lea		18(%[r1], %[r0], 2), %[r0]	\n\t"
 	"		jmp		*%[r0]				\n\t"
+
 	"		vmovdqu		0xc0(%[src],%[off]), %[ymm0]	\n\t"
 	"		vmovdqu		%[ymm0], 0xc0(%[dst],%[off])	\n\t"
 	"		vmovdqu		0xa0(%[src],%[off]), %[ymm0]	\n\t"
