@@ -259,8 +259,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	}
 #endif
 #if defined(CLIB_HAVE_VEC256_MASK_LOAD_STORE)
-      //u32 mask = pow2_mask (n);
-      u32 mask = ~(0xffffffff << n);
+      u32 mask = _bzhi_u32 (0xffffffff, n);
       u8x32_mask_store (u8x32_mask_load_zero (s, mask), d, mask);
 #else
       if (PREDICT_TRUE (n >= 8))
@@ -372,24 +371,26 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
       u8x32 ymm0, ymm1, ymm2, ymm3;
       u64 off, r0, r1;
       asm volatile(
+	/* copy 1st 32 bytes */
 	"vmovdqu	(%[src]), %[ymm0]		\n\t"
 	"vmovdqu	%[ymm0], (%[dst])		\n\t"
-	"mov		$0x20, %[off]			\n\t"
+	"mov		$0x20, %k[off]			\n\t"
+
+	/* do we need to visit main loop */
 	"cmp		$0x11f, %[n]			\n\t"
 	"jbe		.L_last_%=			\n\t"
-#if 0
-	"mov		%[n], %[r0]			\n\t"
-	"xor		%b[r0], %b[r0]			\n\t"
-#else
+
+	/* align dst pointer by eventually moving off back */
 	"mov		%[dst], %[r0]			\n\t"
 	"and		$0x1f, %[r0]			\n\t"
-	"mov		$0x20, %[off]			\n\t"
 	"sub		%[r0], %[off]			\n\t"
+
+	/* loop preparation */
 	"mov		%[n], %[r0]			\n\t"
 	"sub		%[off], %[r0]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
 	"add		%[off], %[r0]			\n\t"
-#endif
+
 	/* main 256-byte copy loop */
 	".L_more_%=:					\n\t"
 	"vmovdqu	0x00(%[src],%[off]), %[ymm0]	\n\t"
@@ -408,7 +409,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"vmovdqu	%[ymm1], 0xa0(%[dst],%[off])	\n\t"
 	"vmovdqu	%[ymm2], 0xc0(%[dst],%[off])	\n\t"
 	"vmovdqu	%[ymm3], 0xe0(%[dst],%[off])	\n\t"
-	"addq		$0x100,%[off]			\n\t"
+	"add		$0x100, %[off]			\n\t"
 	"cmp		%[r0], %[off]			\n\t"
 	"jne		.L_more_%=			\n\t"
 
@@ -439,7 +440,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * calculated above
 	 */
 	"		lea		3f(%%rip), %[r0]		\n\t"
-	"		subq		%[r1], %[r0]			\n\t"
+	"		sub		%[r1], %[r0]			\n\t"
 	"		jmp		*%[r0]				\n\t"
 	"		vmovdqu		0xc0(%[src],%[off]), %[ymm0]	\n\t"
 	"		vmovdqu		%[ymm0], 0xc0(%[dst],%[off])	\n\t"
