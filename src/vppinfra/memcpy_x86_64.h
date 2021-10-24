@@ -371,7 +371,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
       u8x32 ymm0, ymm1, ymm2, ymm3;
       u64 off, r0, r1;
       asm volatile(
-	/* copy 1st 32 bytes */
+	/* copy first and last 32 bytes */
 	"vmovdqu	(%[src]), %[ymm0]		\n\t"
 	"vmovdqu	%[ymm0], (%[dst])		\n\t"
 	"vmovdqu	-0x20(%[src],%[n]), %[ymm0]	\n\t"
@@ -379,19 +379,18 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"cmp		$0x3f,%[n]			\n\t"
 	"jbe		.L_done_%=			\n\t"
 
-	/* do we need to visit main loop */
+	/* if n < (256 + 32) skip main loop */
 	"cmp		$0x11f, %[n]			\n\t"
 	"jbe		.L_last_%=			\n\t"
 
-	/* align dst pointer by eventually moving off back */
+	/* align dst pointer */
 	"mov		%[dst], %[r1]			\n\t"
 	"and		$0x1f, %[r1]			\n\t"
-	"mov		$0x20, %k[off]			\n\t"
-	"sub		%[r1], %[off]			\n\t"
+	"lea		-0x20(%[r1]), %[off]		\n\t"
+	"neg		%[off]				\n\t"
 
 	/* loop preparation */
-	"mov		%[n], %[r0]			\n\t"
-	"sub		%[off], %[r0]			\n\t"
+	"lea		-0x20(%[r1],%[n]), %[r0]	\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
 	"add		%[off], %[r0]			\n\t"
 
