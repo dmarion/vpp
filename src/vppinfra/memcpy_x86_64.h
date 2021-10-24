@@ -417,7 +417,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"jne		.L_more_%=			\n\t"
 
 	/* check if there is more bytes to copy (256 > n > 0) */
-	"cmp		%[off],%[n]			\n\t"
+	"cmp		%[off], %[n]			\n\t"
 	"je		.L_done_%=			\n\t"
 
 #if 1
@@ -430,17 +430,17 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"and		$0xe0, %[n]                    \n\t"
 	"shr		$4, %[n]                       \n\t"
 	"lea		(%[n],%[n],8), %[n]		\n\t"
-	"lea		.L_backwards_%=(%%rip), %[r0]	\n\t"
+	"lea		.L_done_%=(%%rip), %[r0]	\n\t"
 	"sub		%[n], %[r0]                    \n\t"
 
 	"add		$0x200, %[off]			\n\t"
 	"jmp		*%[r0]				\n\t"
 
-	".L_skip_main_%=:					\n\t"
+	".L_skip_main_%=:				\n\t"
 	"mov		$0x220, %[off]			\n\t"
 
 	/* n = ((c - 32) / 32) * 18 */
-	"lea		.L_backwards_%=(%%rip), %[r0]	\n\t"
+	"lea		.L_done_%=(%%rip), %[r0]	\n\t"
 	"shr		$5, %[n]			\n\t"
 	"lea		-9(%[n],%[n],8), %[n]		\n\t"
 	"add		%[n], %[n]			\n\t"
@@ -461,7 +461,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"vmovdqu	%[ymm0], -0x1e0(%[dst],%[off])	\n\t"
 	"vmovdqu	-0x200(%[src],%[off]), %[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x200(%[dst],%[off])	\n\t"
-	".L_backwards_%=:				\n\t"
+	".L_done_%=:				\n\t"
 	/* copy bytes from n-32 to n-1 - this code assumes that n is
 	 * always >= 32
 	 * */
@@ -492,9 +492,9 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"9:						\n\t"
 	"vmovdqu	-0x20(%[src],%[n]),%[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x20(%[dst],%[n])	\n\t"
+	".L_done_%=:					\n\t"
 #endif
 
-	".L_done_%=:					\n\t"
 	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
 	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
 	  [off] "+&r"(off), [r0] "+&r"(r0), [r1] "+&r"(r1)
