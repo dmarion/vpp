@@ -369,11 +369,13 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
   if (1)
     {
       u8x32 ymm0, ymm1, ymm2, ymm3;
-      u64 off, r0, r1, r2;
+      u64 off, r0, r1, r2, r3;
       asm volatile(
 	/* copy first and last 32 bytes */
 	"vmovdqu	(%[src]), %[ymm0]		\n\t"
 	"vmovdqu	%[ymm0], (%[dst])		\n\t"
+	"mov		$0x220, %k[off]			\n\t"
+	"lea		.L_done_%=(%%rip), %[r3]	\n\t"
 	"vmovdqu	-0x20(%[src],%[n]), %[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x20(%[dst],%[n])	\n\t"
 	"cmp		$0x3f,%[n]			\n\t"
@@ -391,6 +393,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	/* loop preparation */
 	"lea		-0x20(%[r1],%[n]), %[r0]	\n\t"
+	"mov		%[r0], %[r2]			\n\t"
+	"and		$0xe0, %[r2]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
 	"add		%[off], %[r0]			\n\t"
 
@@ -426,26 +430,21 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * displacement takes 9 bytes so we need to jump back 18 bytes
 	 * for each 32-byte load/store needed
 	 */
-	"sub		%[off], %[n]                   \n\t"
-	"and		$0xe0, %[n]                    \n\t"
-	"shr		$4, %[n]                       \n\t"
-	"lea		(%[n],%[n],8), %[n]		\n\t"
-	"lea		.L_done_%=(%%rip), %[r0]	\n\t"
-	"sub		%[n], %[r0]                    \n\t"
+	"shr		$4, %[r2]                       \n\t"
+	"lea		(%[r2],%[r2],8), %[r2]		\n\t"
+	"sub		%[r2], %[r3]                    \n\t"
 
 	"add		$0x200, %[off]			\n\t"
-	"jmp		*%[r0]				\n\t"
+	"jmp		*%[r3]				\n\t"
 
 	".L_skip_main_%=:				\n\t"
-	"mov		$0x220, %[off]			\n\t"
 
 	/* n = ((c - 32) / 32) * 18 */
-	"lea		.L_done_%=(%%rip), %[r0]	\n\t"
 	"shr		$5, %[n]			\n\t"
 	"lea		-9(%[n],%[n],8), %[n]		\n\t"
-	"add		%[n], %[n]			\n\t"
-	"sub		%[n], %[r0]			\n\t"
-	"jmp		*%[r0]				\n\t"
+	"shl		$1, %[n]			\n\t"
+	"sub		%[n], %[r3]			\n\t"
+	"jmp		*%[r3]				\n\t"
 
 	"vmovdqu	-0x140(%[src],%[off]), %[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x140(%[dst],%[off])	\n\t"
@@ -497,7 +496,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
 	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
-	  [off] "+&r"(off), [r0] "+&r"(r0), [r1] "+&r"(r1), [r1] "+&r"(r2)
+	  [off] "+&r"(off), [r0] "+&r"(r0), [r1] "+&r"(r1), [r2] "+&r"(r2),
+	  [r3] "+&r"(r3)
 	:
 	: "memory");
 
