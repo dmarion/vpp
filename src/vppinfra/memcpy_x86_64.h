@@ -369,7 +369,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
   if (1)
     {
       u8x32 ymm0, ymm1, ymm2, ymm3;
-      u64 off, r0, r1, r2, r3;
+      u64 off, r0, r3;
       asm volatile(
 	/* copy first 32 bytes */
 	"vmovdqu	(%[src]), %[ymm0]		\n\t"
@@ -388,17 +388,15 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"jbe		.L_skip_main_%=			\n\t"
 
 	/* align dst pointer */
-	"mov		%[dst], %[r1]			\n\t"
-	"and		$0x1f, %[r1]			\n\t"
-	"lea		-0x20(%[r1]), %[off]		\n\t"
-	"neg		%[off]				\n\t"
+	"mov		%[dst], %[r0]			\n\t"
+	"and		$0x1f, %[r0]			\n\t"
+	"sub		%[r0], %[off]			\n\t"
 
 	/* loop preparation */
-	"lea		-0x20(%[r1],%[n]), %[r0]	\n\t"
-	"mov		%[r0], %[r2]			\n\t"
-	"and		$0xe0, %[r2]			\n\t"
+	"lea		-0x20(%[r0],%[n]), %[r0]	\n\t"
+	"mov		%[r0], %[n]			\n\t"
+	"and		$0xe0, %[n]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
-	"add		$0x200, %[off]			\n\t"
 	"add		%[off], %[r0]			\n\t"
 
 	/* main 256-byte copy loop */
@@ -424,7 +422,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"jne		.L_more_%=			\n\t"
 
 	/* check if there is more bytes to copy (256 > n > 0) */
-	"test		%[r2], %[r2]			\n\t"
+	"test		%[n], %[n]			\n\t"
 	"je		.L_done_%=			\n\t"
 
 #if 1
@@ -433,9 +431,9 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * displacement takes 9 bytes so we need to jump back 18 bytes
 	 * for each 32-byte load/store needed
 	 */
-	"shr		$4, %[r2]                       \n\t"
-	"lea		(%[r2],%[r2],8), %[r2]		\n\t"
-	"sub		%[r2], %[r3]                    \n\t"
+	"shr		$4, %[n]			\n\t"
+	"lea		(%[n],%[n],8), %[n]		\n\t"
+	"sub		%[n], %[r3]			\n\t"
 	"jmp		*%[r3]				\n\t"
 
 	".L_skip_main_%=:				\n\t"
@@ -497,8 +495,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
 	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
-	  [off] "+&r"(off), [r0] "+&r"(r0), [r1] "+&r"(r1), [r2] "+&r"(r2),
-	  [r3] "+&r"(r3)
+	  [off] "+&r"(off), [r0] "+&r"(r0), [r3] "+&r"(r3)
 	:
 	: "memory");
 
