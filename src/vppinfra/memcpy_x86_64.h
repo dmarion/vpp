@@ -374,15 +374,19 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	/* copy first 32 bytes */
 	"vmovdqu	(%[src]), %[ymm0]		\n\t"
 	"vmovdqu	%[ymm0], (%[dst])		\n\t"
+
 	/* do a bit of work in parallel with loads/stores */
 	"mov		$0x220, %k[off]			\n\t"
 	"lea		.L_done_%=(%%rip), %[r3]	\n\t"
+
 	/* copy last 32 bytes */
 	"vmovdqu	-0x20(%[src],%[n]), %[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x20(%[dst],%[n])	\n\t"
+
 	/* done if n < 64 */
 	"cmp		$0x3f,%[n]			\n\t"
 	"jbe		.L_done_%=			\n\t"
+
 	/* if n < (256 + 32) skip main loop */
 	"cmp		$0x11f, %[n]			\n\t"
 	"jbe		.L_skip_main_%=			\n\t"
@@ -405,18 +409,18 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"vmovdqu	-0x1e0(%[src],%[off]), %[ymm1]	\n\t"
 	"vmovdqu	-0x1c0(%[src],%[off]), %[ymm2]	\n\t"
 	"vmovdqu	-0x1a0(%[src],%[off]), %[ymm3]	\n\t"
-	"vmovdqu	%[ymm0], -0x200(%[dst],%[off])	\n\t"
-	"vmovdqu	%[ymm1], -0x1e0(%[dst],%[off])	\n\t"
-	"vmovdqu	%[ymm2], -0x1c0(%[dst],%[off])	\n\t"
-	"vmovdqu	%[ymm3], -0x1a0(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm0], -0x200(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm1], -0x1e0(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm2], -0x1c0(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm3], -0x1a0(%[dst],%[off])	\n\t"
 	"vmovdqu	-0x180(%[src],%[off]), %[ymm0]	\n\t"
 	"vmovdqu	-0x160(%[src],%[off]), %[ymm1]	\n\t"
 	"vmovdqu	-0x140(%[src],%[off]), %[ymm2]	\n\t"
 	"vmovdqu	-0x120(%[src],%[off]), %[ymm3]	\n\t"
-	"vmovdqu	%[ymm0], -0x180(%[dst],%[off])	\n\t"
-	"vmovdqu	%[ymm1], -0x160(%[dst],%[off])	\n\t"
-	"vmovdqu	%[ymm2], -0x140(%[dst],%[off])	\n\t"
-	"vmovdqu	%[ymm3], -0x120(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm0], -0x180(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm1], -0x160(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm2], -0x140(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm3], -0x120(%[dst],%[off])	\n\t"
 	"add		$0x100, %[off]			\n\t"
 	"cmp		%[r0], %[off]			\n\t"
 	"jne		.L_more_%=			\n\t"
