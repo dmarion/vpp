@@ -378,16 +378,16 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"vmovdqu	%[ymm0], -0x20(%[dst],%[n])	\n\t"
 	"cmp		$0x3f,%[n]			\n\t"
 	"jbe		.L_done_%=			\n\t"
-	"mov		$0x20, %k[off]			\n\t"
 
 	/* do we need to visit main loop */
 	"cmp		$0x11f, %[n]			\n\t"
 	"jbe		.L_last_%=			\n\t"
 
 	/* align dst pointer by eventually moving off back */
-	"mov		%[dst], %[r0]			\n\t"
-	"and		$0x1f, %[r0]			\n\t"
-	"sub		%[r0], %[off]			\n\t"
+	"mov		%[dst], %[r1]			\n\t"
+	"and		$0x1f, %[r1]			\n\t"
+	"mov		$0x20, %k[off]			\n\t"
+	"sub		%[r1], %[off]			\n\t"
 
 	/* loop preparation */
 	"mov		%[n], %[r0]			\n\t"
@@ -421,8 +421,6 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"cmp		%[off],%[n]			\n\t"
 	"je		.L_done_%=			\n\t"
 
-	/* last < 256 bytes */
-	".L_last_%=:					\n\t"
 #if 1
 	/* Calculate jump offset.
 	 * VEX encoded unaligned move with base, offset and 32 bit
@@ -445,6 +443,17 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"lea		18(%[r1], %[r0], 2), %[r0]	\n\t"
 #endif
 	"sub		$0x100, %[off]			\n\t"
+	"jmp		*%[r0]				\n\t"
+
+	".L_last_%=:					\n\t"
+	"mov		$32-256, %[off]			\n\t"
+
+	/* n = ((c - 32) / 32) * 18 */
+	"lea		3f(%%rip), %[r0]		\n\t"
+	"shr		$5, %[n]			\n\t"
+	"lea		-9(%[n],%[n],8), %[n]		\n\t"
+	"add		%[n], %[n]			\n\t"
+	"sub		%[n], %[r0]			\n\t"
 	"jmp		*%[r0]				\n\t"
 
 	"vmovdqu	0x1c0(%[src],%[off]), %[ymm0]	\n\t"
