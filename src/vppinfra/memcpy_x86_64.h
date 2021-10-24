@@ -371,16 +371,18 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
       u8x32 ymm0, ymm1, ymm2, ymm3;
       u64 off, r0, r1, r2, r3;
       asm volatile(
-	/* copy first and last 32 bytes */
+	/* copy first 32 bytes */
 	"vmovdqu	(%[src]), %[ymm0]		\n\t"
 	"vmovdqu	%[ymm0], (%[dst])		\n\t"
+	/* do a bit of work in parallel with loads/stores */
 	"mov		$0x220, %k[off]			\n\t"
 	"lea		.L_done_%=(%%rip), %[r3]	\n\t"
+	/* copy last 32 bytes */
 	"vmovdqu	-0x20(%[src],%[n]), %[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x20(%[dst],%[n])	\n\t"
+	/* done if n < 64 */
 	"cmp		$0x3f,%[n]			\n\t"
 	"jbe		.L_done_%=			\n\t"
-
 	/* if n < (256 + 32) skip main loop */
 	"cmp		$0x11f, %[n]			\n\t"
 	"jbe		.L_skip_main_%=			\n\t"
