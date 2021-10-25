@@ -369,22 +369,26 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
   if (1)
     {
       u8x32 ymm0, ymm1, ymm2, ymm3;
-      u64 off, r0, r3;
+      u64 off, r0, jmp_ptr;
       asm volatile(
 	/* copy first 32 bytes */
 	"vmovdqu	(%[src]), %[ymm0]		\n\t"
 	"vmovdqu	%[ymm0], (%[dst])		\n\t"
-
-	/* do a bit of work in parallel with loads/stores */
+	/* do a bit of work in parallel with loads/stores
+	 *  initial offset is 256 + 32
+	 *  32 bytes are already copied
+	 *  256 is used to force 32-bit displacement of vmovdqu
+	 *  bellow so all load/stores at the end are 9-byte long
+	 */
 	"mov		$0x220, %k[off]			\n\t"
-	"lea		.L_done_%=(%%rip), %[r3]	\n\t"
+	"lea		.L_done_%=(%%rip), %[jmp_ptr]	\n\t"
 
 	/* copy last 32 bytes */
 	"vmovdqu	-0x20(%[src],%[n]), %[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x20(%[dst],%[n])	\n\t"
 
-	/* done if n < 64 */
-	"cmp		$0x3f,%[n]			\n\t"
+	/* done if n <= 64 */
+	"cmp		$0x40,%[n]			\n\t"
 	"jbe		.L_done_%=			\n\t"
 
 	/* if n < (256 + 32) skip main loop */
@@ -396,7 +400,10 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"and		$0x1f, %[r0]			\n\t"
 	"sub		%[r0], %[off]			\n\t"
 
-	/* loop preparation */
+	/* loop preparation
+	 * r0 - loop exit value
+	 * n  - nomber of bytes to copy in the last round
+	 */
 	"lea		-0x20(%[r0],%[n]), %[r0]	\n\t"
 	"mov		%[r0], %[n]			\n\t"
 	"and		$0xe0, %[n]			\n\t"
@@ -437,17 +444,16 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 */
 	"shr		$4, %[n]			\n\t"
 	"lea		(%[n],%[n],8), %[n]		\n\t"
-	"sub		%[n], %[r3]			\n\t"
-	"jmp		*%[r3]				\n\t"
-
-	".L_skip_main_%=:				\n\t"
+	"sub		%[n], %[jmp_ptr]		\n\t"
+	"jmp		*%[jmp_ptr]			\n\t"
 
 	/* n = ((c - 32) / 32) * 18 */
+	".L_skip_main_%=:				\n\t"
 	"shr		$5, %[n]			\n\t"
 	"lea		-9(%[n],%[n],8), %[n]		\n\t"
 	"shl		$1, %[n]			\n\t"
-	"sub		%[n], %[r3]			\n\t"
-	"jmp		*%[r3]				\n\t"
+	"sub		%[n], %[jmp_ptr]		\n\t"
+	"jmp		*%[jmp_ptr]			\n\t"
 
 	"vmovdqu	-0x140(%[src],%[off]), %[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x140(%[dst],%[off])	\n\t"
@@ -464,9 +470,6 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"vmovdqu	-0x200(%[src],%[off]), %[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x200(%[dst],%[off])	\n\t"
 	".L_done_%=:				\n\t"
-	/* copy bytes from n-32 to n-1 - this code assumes that n is
-	 * always >= 32
-	 * */
 #else
 	"mov		%[n], %[r0]			\n\t"
 	"sub		%[off], %[r0]			\n\t"
@@ -499,7 +502,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
 	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
-	  [off] "+&r"(off), [r0] "+&r"(r0), [r3] "+&r"(r3)
+	  [off] "+&r"(off), [r0] "+&r"(r0), [jmp_ptr] "+&r"(jmp_ptr)
 	:
 	: "memory");
 
