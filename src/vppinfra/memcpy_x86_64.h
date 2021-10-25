@@ -374,6 +374,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	/* copy first 32 bytes */
 	"vmovdqu	(%[src]), %[ymm0]		\n\t"
 	"vmovdqu	%[ymm0], (%[dst])		\n\t"
+
 	/* do a bit of work in parallel with loads/stores
 	 *  initial offset is 256 + 32
 	 *  32 bytes are already copied
@@ -390,6 +391,10 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	/* done if n <= 64 */
 	"cmp		$0x40,%[n]			\n\t"
 	"jbe		.L_done_%=			\n\t"
+
+	/* done if n <= 96 */
+	"cmp		$0x60,%[n]			\n\t"
+	"jbe		.L_only_one_%=			\n\t"
 
 	/* if n < (256 + 32) skip main loop */
 	"cmp		$0x11f, %[n]			\n\t"
@@ -467,38 +472,10 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"vmovdqu	%[ymm0], -0x1c0(%[dst],%[off])	\n\t"
 	"vmovdqu	-0x1e0(%[src],%[off]), %[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x1e0(%[dst],%[off])	\n\t"
+	".L_only_one_%=:				\n\t"
 	"vmovdqu	-0x200(%[src],%[off]), %[ymm0]	\n\t"
 	"vmovdqu	%[ymm0], -0x200(%[dst],%[off])	\n\t"
 	".L_done_%=:				\n\t"
-#else
-	"mov		%[n], %[r0]			\n\t"
-	"sub		%[off], %[r0]			\n\t"
-	"cmp		$0x20, %[r0]			\n\t"
-	"jbe		9f				\n\t"
-	"vmovdqu	0x00(%[src],%[off]), %[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], 0x00(%[dst],%[off])	\n\t"
-	"cmp		$0x40,  %[r0]			\n\t"
-	"jbe		9f				\n\t"
-	"vmovdqu	0x20(%[src],%[off]),%[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], 0x20(%[dst],%[off])	\n\t"
-	"cmp		$0x80,%[r0]			\n\t"
-	"jbe		8f				\n\t"
-	"vmovdqu	0x40(%[src],%[off]),%[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], 0x40(%[dst],%[off])	\n\t"
-	"vmovdqu	0x60(%[src],%[off]),%[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], 0x60(%[dst],%[off])	\n\t"
-	"vmovdqu	-0x80(%[src],%[n]),%[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x80(%[dst],%[n])	\n\t"
-	"vmovdqu	-0x60(%[src],%[n]),%[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x60(%[dst],%[n])	\n\t"
-	"8:						\n\t"
-	"vmovdqu	-0x40(%[src],%[n]),%[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x40(%[dst],%[n])	\n\t"
-	"9:						\n\t"
-	"vmovdqu	-0x20(%[src],%[n]),%[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x20(%[dst],%[n])	\n\t"
-	".L_done_%=:					\n\t"
-#endif
 
 	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
 	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
