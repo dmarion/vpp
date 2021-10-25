@@ -227,16 +227,16 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
   u8x64u *dv = (u8x64u *) dst, *sv = (u8x64u *) src;
   const u8 vec_bytes = 64;
   const u16 block_bytes = 512;
+  u64 off;
 #elif defined(CLIB_HAVE_VEC256)
-  u8x32u *dv = (u8x32u *) dst, *sv = (u8x32u *) src;
   const u8 vec_bytes = 32;
 #else
   u8x16u *dv = (u8x16u *) dst, *sv = (u8x16u *) src;
   const u8 vec_bytes = 16;
   const u16 block_bytes = 256;
+  u64 off;
 #endif
   u8 *d = (u8 *) dst, *s = (u8 *) src;
-  u64 off;
 
   /* emit minimal number of instructions for cases where n is compile-time
    * constant */
@@ -309,15 +309,6 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
       n -= off;
     }
 #elif defined(CLIB_HAVE_VEC256)
-  if (0 && n > 128 && (off = (uword) d & (vec_bytes - 1)))
-    {
-      /* dst pointer is not aligned */
-      off = vec_bytes - off;
-      dv[0] = sv[0];
-      d += off;
-      s += off;
-      n -= off;
-    }
 #else
   if (PREDICT_FALSE (n < block_bytes))
     goto last;
@@ -441,9 +432,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"test		%[n], %[n]			\n\t"
 	"je		.L_done_%=			\n\t"
 
-#if 1
-	/* Calculate jump offset.
-	 * VEX encoded unaligned move with base, offset and 32 bit
+	/* VEX encoded unaligned move with base, offset and 32 bit
 	 * displacement takes 9 bytes so we need to jump back 18 bytes
 	 * for each 32-byte load/store needed
 	 */
