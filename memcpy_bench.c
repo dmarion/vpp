@@ -155,15 +155,15 @@ next:
 
   while (1)
     {
-#if 0
-      tsc_mark ("new trm gcc");
-      test_exec (ver1_trm_gcc, b, a);
+#if 1
       tsc_mark ("old trm gcc");
       test_exec (ver2_trm_gcc, b, a);
-      tsc_mark ("new trm clang");
-      test_exec (ver1_trm_clang, b, a);
+      tsc_mark ("new trm gcc");
+      test_exec (ver1_trm_gcc, b, a);
       tsc_mark ("old trm clang");
       test_exec (ver2_trm_clang, b, a);
+      tsc_mark ("new trm clang");
+      test_exec (ver1_trm_clang, b, a);
 #endif
 
 #if 1
