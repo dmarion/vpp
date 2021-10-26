@@ -377,8 +377,6 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"sub		%[n], %[jmp_ptr]		\n\t"
 	"jmp		*%[jmp_ptr]			\n\t"
 
-	"vmovdqu8	-0x140(%[src],%[off]), %[zmm0]	\n\t"
-	"vmovdqu8	%[zmm0], -0x140(%[dst],%[off])	\n\t"
 	"vmovdqu8	-0x180(%[src],%[off]), %[zmm0]	\n\t"
 	"vmovdqu8	%[zmm0], -0x180(%[dst],%[off])	\n\t"
 	"vmovdqu8	-0x1c0(%[src],%[off]), %[zmm0]	\n\t"
