@@ -231,7 +231,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 #elif defined(CLIB_HAVE_VEC256)
   const u8 vec_bytes = 32;
 #else
-  const u8 vec_bytes = 16;
+  const u8 vec_bytes = 32;
 #endif
   u8 *d = (u8 *) dst, *s = (u8 *) src;
 
@@ -261,14 +261,12 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 #else
       if (PREDICT_TRUE (n >= 8))
 	{
-#ifdef CLIB_HAVE_VEC256 /* AVX2 only - no mask load/store */
 	  if (n >= 16)
 	    {
 	      *(u8x16u *) d = *(u8x16u *) s;
 	      *(u8x16u *) (d + n - 16) = *(u8x16u *) (s + n - 16);
 	      goto done;
 	    }
-#endif
 	  *(u64u *) d = *(u64u *) s;
 	  *(u64u *) (d + n - 8) = *(u64u *) (s + n - 8);
 	  goto done;
@@ -464,33 +462,37 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
       u8x16 xmm0, xmm1, xmm2, xmm3;
       u64 off, r0, jmp_ptr;
       asm volatile(
-	/* copy first 16 bytes */
+	/* copy first 32 bytes */
 	"movdqu		(%[src]), %[xmm0]		\n\t"
 	"movdqu		%[xmm0], (%[dst])		\n\t"
+	"movdqu		0x10(%[src]), %[xmm0]		\n\t"
+	"movdqu		%[xmm0], 0x10(%[dst])		\n\t"
 
 	/* do a bit of work in parallel with loads/stores
-	 *  initial offset is 256 + 16
-	 *  16 bytes are already copied
+	 *  initial offset is 256 + 32
+	 *  32 bytes are already copied
 	 *  256 is used to force 16-bit displacement of vmovdqu
 	 *  bellow so all load/stores at the end are 9-byte long
 	 */
-	"mov		$0x210, %k[off]			\n\t"
+	"mov		$0x220, %k[off]			\n\t"
 	"lea		.L_done_%=(%%rip), %[jmp_ptr]	\n\t"
 
-	/* copy last 16 bytes */
+	/* copy last 32 bytes */
+	"movdqu		-0x20(%[src],%[n]), %[xmm0]	\n\t"
+	"movdqu		%[xmm0], -0x20(%[dst],%[n])	\n\t"
 	"movdqu		-0x10(%[src],%[n]), %[xmm0]	\n\t"
 	"movdqu		%[xmm0], -0x10(%[dst],%[n])	\n\t"
 
-	/* done if n <= 32 */
-	"cmp		$0x20,%[n]			\n\t"
+	/* done if n <= 64 */
+	"cmp		$0x40,%[n]			\n\t"
 	"jbe		.L_done_%=			\n\t"
 
-	/* done if n <= 48 */
-	"cmp		$0x30,%[n]			\n\t"
-	"jbe		.L_only_one_%=			\n\t"
+	/* done if n <= 96 */
+	"cmp		$0x60,%[n]			\n\t"
+	"jbe		.L_only_two_%=			\n\t"
 
-	/* if n < (256 + 16) skip main loop */
-	"cmp		$0x10f, %[n]			\n\t"
+	/* if n < (256 + 32) skip main loop */
+	"cmp		$0x11f, %[n]			\n\t"
 	"jbe		.L_skip_main_%=			\n\t"
 
 	/* align dst pointer */
@@ -502,7 +504,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * r0 - loop exit value
 	 * n  - nomber of bytes to copy in the last round
 	 */
-	"lea		-0x10(%[r0],%[n]), %[r0]	\n\t"
+	"lea		-0x20(%[r0],%[n]), %[r0]	\n\t"
 	"mov		%[r0], %[n]			\n\t"
 	"and		$0xf0, %[n]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
@@ -526,6 +528,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"movdqa		%[xmm1], -0x1b0(%[dst],%[off])	\n\t"
 	"movdqa		%[xmm2], -0x1a0(%[dst],%[off])	\n\t"
 	"movdqa		%[xmm3], -0x190(%[dst],%[off])	\n\t"
+#if 1
 	"movdqu		-0x180(%[src],%[off]), %[xmm0]	\n\t"
 	"movdqu		-0x170(%[src],%[off]), %[xmm1]	\n\t"
 	"movdqu		-0x160(%[src],%[off]), %[xmm2]	\n\t"
@@ -543,6 +546,9 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"movdqa		%[xmm2], -0x120(%[dst],%[off])	\n\t"
 	"movdqa		%[xmm3], -0x110(%[dst],%[off])	\n\t"
 	"add		$0x100, %[off]			\n\t"
+#else
+	"add		$0x80, %[off]			\n\t"
+#endif
 	"cmp		%[r0], %[off]			\n\t"
 	"jne		.L_more_%=			\n\t"
 
@@ -550,19 +556,19 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"test		%[n], %[n]			\n\t"
 	"je		.L_done_%=			\n\t"
 
-	/* VEX encoded unaligned move with base, offset and 32 bit
+	/* unaligned move with base, offset and 32 bit
 	 * displacement takes 9 bytes so we need to jump back 18 bytes
-	 * for each 32-byte load/store needed
+	 * for each 16-byte load/store
 	 */
 	"shr		$3, %[n]			\n\t"
 	"lea		(%[n],%[n],8), %[n]		\n\t"
 	"sub		%[n], %[jmp_ptr]		\n\t"
 	"jmp		*%[jmp_ptr]			\n\t"
 
-	/* n = ((c - 16) / 16) * 18 */
+	/* n = ((c - 32) / 16) * 18 */
 	".L_skip_main_%=:				\n\t"
 	"shr		$4, %[n]			\n\t"
-	"lea		-9(%[n],%[n],8), %[n]		\n\t"
+	"lea		-18(%[n],%[n],8), %[n]		\n\t"
 	"shl		$1, %[n]			\n\t"
 	"sub		%[n], %[jmp_ptr]		\n\t"
 	"jmp		*%[jmp_ptr]			\n\t"
@@ -593,6 +599,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"movdqu		%[xmm0], -0x1d0(%[dst],%[off])	\n\t"
 	"movdqu		-0x1e0(%[src],%[off]), %[xmm0]	\n\t"
 	"movdqu		%[xmm0], -0x1e0(%[dst],%[off])	\n\t"
+	".L_only_two_%=:				\n\t"
 	"movdqu		-0x1f0(%[src],%[off]), %[xmm0]	\n\t"
 	"movdqu		%[xmm0], -0x1f0(%[dst],%[off])	\n\t"
 	".L_only_one_%=:				\n\t"
