@@ -224,9 +224,7 @@ static_always_inline void *
 clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 {
 #if defined(CLIB_HAVE_VEC512)
-  u8x64u *dv = (u8x64u *) dst, *sv = (u8x64u *) src;
   const u8 vec_bytes = 64;
-  const u16 block_bytes = 512;
   u64 off;
 #elif defined(CLIB_HAVE_VEC256)
   const u8 vec_bytes = 32;
@@ -291,52 +289,125 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
       goto done;
     }
 
-#ifdef CLIB_HAVE_VEC512
-  if (PREDICT_FALSE (n < block_bytes))
-    goto last;
-  if (n > 128 && (off = (uword) d & (vec_bytes - 1)))
-    {
-      /* dst pointer is not aligned */
-      off = vec_bytes - off;
-      dv[0] = sv[0];
-      d += off;
-      s += off;
-      n -= off;
-    }
-#endif
-
 #endif
 
 #ifdef CLIB_HAVE_VEC512
-  while (PREDICT_TRUE (n >= block_bytes))
+  if (1)
     {
-      u8x64 zmm0, zmm1, zmm2;
+      u8x32 ymm0, ymm1, ymm2, ymm3;
+      u64 off, r0, jmp_ptr;
       asm volatile(
-	/* copy 512 bytes using 64-byte load/stores, n -= 512,
-	 * dst += 512, src += 512 */
-	"vmovdqu8	(%[src]), %[zmm0]	\n\t" /* load 0 */
-	"vmovdqu8	0x40(%[src]), %[zmm1]	\n\t" /* load 1 */
-	"vmovdqu8	0x80(%[src]), %[zmm2]	\n\t" /* load 2 */
-	"subq		$0x200,%[n]		\n\t" /* n -= 512 */
-	"vmovdqa64	%[zmm0], (%[dst])	\n\t" /* store 0 */
-	"vmovdqu8	0xc0(%[src]), %[zmm0]	\n\t" /* load 3 */
-	"vmovdqa64	%[zmm1], 0x40(%[dst])	\n\t" /* store 1 */
-	"vmovdqu8	0x100(%[src]), %[zmm1]	\n\t" /* load 4 */
-	"vmovdqa64	%[zmm2], 0x80(%[dst])	\n\t" /* store 2 */
-	"vmovdqu8	0x140(%[src]), %[zmm2]	\n\t" /* load 5 */
-	"vmovdqa64	%[zmm0], 0xc0(%[dst])	\n\t" /* store 3 */
-	"vmovdqu8	0x180(%[src]), %[zmm0]	\n\t" /* load 6 */
-	"vmovdqa64	%[zmm1], 0x100(%[dst])	\n\t" /* store 4 */
-	"vmovdqu8	0x1c0(%[src]), %[zmm1]	\n\t" /* load 7 */
-	"addq		$0x200,%[src]		\n\t" /* src += 512  */
-	"vmovdqa64	%[zmm2], 0x140(%[dst])	\n\t" /* store 5 */
-	"vmovdqa64	%[zmm0], 0x180(%[dst])	\n\t" /* store 6 */
-	"vmovdqa64	%[zmm1], 0x1c0(%[dst])	\n\t" /* store 7 */
-	"addq	$0x200,%[dst]		\n\t"	      /* dst += 512 */
-	: [zmm0] "=&x"(zmm0), [zmm1] "=&x"(zmm1), [zmm2] "=&x"(zmm2),
-	  [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n)
+	/* copy first 32 bytes */
+	"vmovdqu	(%[src]), %[ymm0]		\n\t"
+	"vmovdqu	%[ymm0], (%[dst])		\n\t"
+
+	/* do a bit of work in parallel with loads/stores
+	 *  initial offset is 256 + 32
+	 *  32 bytes are already copied
+	 *  256 is used to force 32-bit displacement of vmovdqu
+	 *  bellow so all load/stores at the end are 9-byte long
+	 */
+	"mov		$0x220, %k[off]			\n\t"
+	"lea		.L_done_%=(%%rip), %[jmp_ptr]	\n\t"
+
+	/* copy last 32 bytes */
+	"vmovdqu	-0x20(%[src],%[n]), %[ymm0]	\n\t"
+	"vmovdqu	%[ymm0], -0x20(%[dst],%[n])	\n\t"
+
+	/* done if n <= 64 */
+	"cmp		$0x40,%[n]			\n\t"
+	"jbe		.L_done_%=			\n\t"
+
+	/* done if n <= 96 */
+	"cmp		$0x60,%[n]			\n\t"
+	"jbe		.L_only_one_%=			\n\t"
+
+	/* if n < (256 + 32) skip main loop */
+	"cmp		$0x11f, %[n]			\n\t"
+	"jbe		.L_skip_main_%=			\n\t"
+
+	/* align dst pointer */
+	"mov		%[dst], %[r0]			\n\t"
+	"and		$0x1f, %[r0]			\n\t"
+	"sub		%[r0], %[off]			\n\t"
+
+	/* loop preparation
+	 * r0 - loop exit value
+	 * n  - nomber of bytes to copy in the last round
+	 */
+	"lea		-0x20(%[r0],%[n]), %[r0]	\n\t"
+	"mov		%[r0], %[n]			\n\t"
+	"and		$0xe0, %[n]			\n\t"
+	"xor		%b[r0], %b[r0]			\n\t"
+	"add		%[off], %[r0]			\n\t"
+
+	/* main 256-byte copy loop */
+	".L_more_%=:					\n\t"
+	"vmovdqu	-0x200(%[src],%[off]), %[ymm0]	\n\t"
+	"vmovdqu	-0x1e0(%[src],%[off]), %[ymm1]	\n\t"
+	"vmovdqu	-0x1c0(%[src],%[off]), %[ymm2]	\n\t"
+	"vmovdqu	-0x1a0(%[src],%[off]), %[ymm3]	\n\t"
+	"vmovdqa	%[ymm0], -0x200(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm1], -0x1e0(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm2], -0x1c0(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm3], -0x1a0(%[dst],%[off])	\n\t"
+	"vmovdqu	-0x180(%[src],%[off]), %[ymm0]	\n\t"
+	"vmovdqu	-0x160(%[src],%[off]), %[ymm1]	\n\t"
+	"vmovdqu	-0x140(%[src],%[off]), %[ymm2]	\n\t"
+	"vmovdqu	-0x120(%[src],%[off]), %[ymm3]	\n\t"
+	"vmovdqa	%[ymm0], -0x180(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm1], -0x160(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm2], -0x140(%[dst],%[off])	\n\t"
+	"vmovdqa	%[ymm3], -0x120(%[dst],%[off])	\n\t"
+	"add		$0x100, %[off]			\n\t"
+	"cmp		%[r0], %[off]			\n\t"
+	"jne		.L_more_%=			\n\t"
+
+	/* check if there is more bytes to copy (256 > n > 0) */
+	"test		%[n], %[n]			\n\t"
+	"je		.L_done_%=			\n\t"
+
+	/* VEX encoded unaligned move with base, offset and 32 bit
+	 * displacement takes 9 bytes so we need to jump back 18 bytes
+	 * for each 32-byte load/store needed
+	 */
+	"shr		$4, %[n]			\n\t"
+	"lea		(%[n],%[n],8), %[n]		\n\t"
+	"sub		%[n], %[jmp_ptr]		\n\t"
+	"jmp		*%[jmp_ptr]			\n\t"
+
+	/* n = ((c - 32) / 32) * 18 */
+	".L_skip_main_%=:				\n\t"
+	"shr		$5, %[n]			\n\t"
+	"lea		-9(%[n],%[n],8), %[n]		\n\t"
+	"shl		$1, %[n]			\n\t"
+	"sub		%[n], %[jmp_ptr]		\n\t"
+	"jmp		*%[jmp_ptr]			\n\t"
+
+	"vmovdqu	-0x140(%[src],%[off]), %[ymm0]	\n\t"
+	"vmovdqu	%[ymm0], -0x140(%[dst],%[off])	\n\t"
+	"vmovdqu	-0x160(%[src],%[off]), %[ymm0]	\n\t"
+	"vmovdqu	%[ymm0], -0x160(%[dst],%[off])	\n\t"
+	"vmovdqu	-0x180(%[src],%[off]), %[ymm0]	\n\t"
+	"vmovdqu	%[ymm0], -0x180(%[dst],%[off])	\n\t"
+	"vmovdqu	-0x1a0(%[src],%[off]), %[ymm0]	\n\t"
+	"vmovdqu	%[ymm0], -0x1a0(%[dst],%[off])	\n\t"
+	"vmovdqu	-0x1c0(%[src],%[off]), %[ymm0]	\n\t"
+	"vmovdqu	%[ymm0], -0x1c0(%[dst],%[off])	\n\t"
+	"vmovdqu	-0x1e0(%[src],%[off]), %[ymm0]	\n\t"
+	"vmovdqu	%[ymm0], -0x1e0(%[dst],%[off])	\n\t"
+	".L_only_one_%=:				\n\t"
+	"vmovdqu	-0x200(%[src],%[off]), %[ymm0]	\n\t"
+	"vmovdqu	%[ymm0], -0x200(%[dst],%[off])	\n\t"
+	".L_done_%=:				\n\t"
+
+	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
+	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
+	  [off] "+&r"(off), [r0] "+&r"(r0), [jmp_ptr] "+&r"(jmp_ptr)
 	:
 	: "memory");
+
+      return dst;
     }
 #elif defined(CLIB_HAVE_VEC256)
   if (1)
@@ -619,7 +690,6 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 
 #ifdef CLIB_HAVE_VEC512
-last:
   if (PREDICT_TRUE (n))
     {
       off = n - vec_bytes;
