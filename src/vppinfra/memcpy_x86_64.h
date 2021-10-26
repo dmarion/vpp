@@ -293,48 +293,50 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 #ifdef CLIB_HAVE_VEC512
   if (1)
     {
-      u8x32 ymm0, ymm1, ymm2, ymm3;
+      u8x64  zmm0, zmm1, zmm2, zmm3;
       u64 off, r0, jmp_ptr;
+      if (n > 319)
+	return __builtin_memcpy (dst, src, n);
       asm volatile(
 	/* copy first 32 bytes */
-	"vmovdqu	(%[src]), %[ymm0]		\n\t"
-	"vmovdqu	%[ymm0], (%[dst])		\n\t"
+	"vmovdqu8	(%[src]), %[zmm0]		\n\t"
+	"vmovdqu8	%[zmm0], (%[dst])		\n\t"
 
 	/* do a bit of work in parallel with loads/stores
 	 *  initial offset is 256 + 32
-	 *  32 bytes are already copied
-	 *  256 is used to force 32-bit displacement of vmovdqu
+	 *  64 bytes are already copied
+	 *  256 is used to force 32-bit displacement of vmovdqu8
 	 *  bellow so all load/stores at the end are 9-byte long
 	 */
-	"mov		$0x220, %k[off]			\n\t"
+	"mov		$0x240, %k[off]			\n\t"
 	"lea		.L_done_%=(%%rip), %[jmp_ptr]	\n\t"
 
-	/* copy last 32 bytes */
-	"vmovdqu	-0x20(%[src],%[n]), %[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x20(%[dst],%[n])	\n\t"
+	/* copy last 64 bytes */
+	"vmovdqu8	-0x40(%[src],%[n]), %[zmm0]	\n\t"
+	"vmovdqu8	%[zmm0], -0x40(%[dst],%[n])	\n\t"
 
-	/* done if n <= 64 */
-	"cmp		$0x40,%[n]			\n\t"
+	/* done if n <= 128 */
+	"cmp		$0x80,%[n]			\n\t"
 	"jbe		.L_done_%=			\n\t"
 
-	/* done if n <= 96 */
-	"cmp		$0x60,%[n]			\n\t"
+	/* done if n <= 192 */
+	"cmp		$0xc0,%[n]			\n\t"
 	"jbe		.L_only_one_%=			\n\t"
 
-	/* if n < (256 + 32) skip main loop */
-	"cmp		$0x11f, %[n]			\n\t"
+	/* if n < (256 + 64) skip main loop */
+	"cmp		$0x13f, %[n]			\n\t"
 	"jbe		.L_skip_main_%=			\n\t"
 
 	/* align dst pointer */
 	"mov		%[dst], %[r0]			\n\t"
-	"and		$0x1f, %[r0]			\n\t"
+	"and		$0x3f, %[r0]			\n\t"
 	"sub		%[r0], %[off]			\n\t"
 
 	/* loop preparation
 	 * r0 - loop exit value
 	 * n  - nomber of bytes to copy in the last round
 	 */
-	"lea		-0x20(%[r0],%[n]), %[r0]	\n\t"
+	"lea		-0x40(%[r0],%[n]), %[r0]	\n\t"
 	"mov		%[r0], %[n]			\n\t"
 	"and		$0xe0, %[n]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
@@ -342,22 +344,14 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	/* main 256-byte copy loop */
 	".L_more_%=:					\n\t"
-	"vmovdqu	-0x200(%[src],%[off]), %[ymm0]	\n\t"
-	"vmovdqu	-0x1e0(%[src],%[off]), %[ymm1]	\n\t"
-	"vmovdqu	-0x1c0(%[src],%[off]), %[ymm2]	\n\t"
-	"vmovdqu	-0x1a0(%[src],%[off]), %[ymm3]	\n\t"
-	"vmovdqa	%[ymm0], -0x200(%[dst],%[off])	\n\t"
-	"vmovdqa	%[ymm1], -0x1e0(%[dst],%[off])	\n\t"
-	"vmovdqa	%[ymm2], -0x1c0(%[dst],%[off])	\n\t"
-	"vmovdqa	%[ymm3], -0x1a0(%[dst],%[off])	\n\t"
-	"vmovdqu	-0x180(%[src],%[off]), %[ymm0]	\n\t"
-	"vmovdqu	-0x160(%[src],%[off]), %[ymm1]	\n\t"
-	"vmovdqu	-0x140(%[src],%[off]), %[ymm2]	\n\t"
-	"vmovdqu	-0x120(%[src],%[off]), %[ymm3]	\n\t"
-	"vmovdqa	%[ymm0], -0x180(%[dst],%[off])	\n\t"
-	"vmovdqa	%[ymm1], -0x160(%[dst],%[off])	\n\t"
-	"vmovdqa	%[ymm2], -0x140(%[dst],%[off])	\n\t"
-	"vmovdqa	%[ymm3], -0x120(%[dst],%[off])	\n\t"
+	"vmovdqu8	-0x200(%[src],%[off]), %[zmm0]	\n\t"
+	"vmovdqu8	-0x1c0(%[src],%[off]), %[zmm2]	\n\t"
+	"vmovdqu64	%[zmm0], -0x200(%[dst],%[off])	\n\t"
+	"vmovdqu64	%[zmm2], -0x1c0(%[dst],%[off])	\n\t"
+	"vmovdqu8	-0x180(%[src],%[off]), %[zmm0]	\n\t"
+	"vmovdqu8	-0x140(%[src],%[off]), %[zmm2]	\n\t"
+	"vmovdqu64	%[zmm0], -0x180(%[dst],%[off])	\n\t"
+	"vmovdqu64	%[zmm2], -0x140(%[dst],%[off])	\n\t"
 	"add		$0x100, %[off]			\n\t"
 	"cmp		%[r0], %[off]			\n\t"
 	"jne		.L_more_%=			\n\t"
@@ -377,31 +371,25 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	/* n = ((c - 32) / 32) * 18 */
 	".L_skip_main_%=:				\n\t"
-	"shr		$5, %[n]			\n\t"
-	"lea		-9(%[n],%[n],8), %[n]		\n\t"
-	"shl		$1, %[n]			\n\t"
+	"sub		$0x40, %[n]			\n\t"
+	"shr		$6, %[n]			\n\t"
+	"shl		$4, %[n]			\n\t"
 	"sub		%[n], %[jmp_ptr]		\n\t"
 	"jmp		*%[jmp_ptr]			\n\t"
 
-	"vmovdqu	-0x140(%[src],%[off]), %[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x140(%[dst],%[off])	\n\t"
-	"vmovdqu	-0x160(%[src],%[off]), %[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x160(%[dst],%[off])	\n\t"
-	"vmovdqu	-0x180(%[src],%[off]), %[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x180(%[dst],%[off])	\n\t"
-	"vmovdqu	-0x1a0(%[src],%[off]), %[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x1a0(%[dst],%[off])	\n\t"
-	"vmovdqu	-0x1c0(%[src],%[off]), %[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x1c0(%[dst],%[off])	\n\t"
-	"vmovdqu	-0x1e0(%[src],%[off]), %[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x1e0(%[dst],%[off])	\n\t"
+	"vmovdqu8	-0x140(%[src],%[off]), %[zmm0]	\n\t"
+	"vmovdqu8	%[zmm0], -0x140(%[dst],%[off])	\n\t"
+	"vmovdqu8	-0x180(%[src],%[off]), %[zmm0]	\n\t"
+	"vmovdqu8	%[zmm0], -0x180(%[dst],%[off])	\n\t"
+	"vmovdqu8	-0x1c0(%[src],%[off]), %[zmm0]	\n\t"
+	"vmovdqu8	%[zmm0], -0x1c0(%[dst],%[off])	\n\t"
 	".L_only_one_%=:				\n\t"
-	"vmovdqu	-0x200(%[src],%[off]), %[ymm0]	\n\t"
-	"vmovdqu	%[ymm0], -0x200(%[dst],%[off])	\n\t"
+	"vmovdqu8	-0x200(%[src],%[off]), %[zmm0]	\n\t"
+	"vmovdqu8	%[zmm0], -0x200(%[dst],%[off])	\n\t"
 	".L_done_%=:				\n\t"
 
-	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
-	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
+	: [zmm0] "=&x"(zmm0), [zmm1] "=&x"(zmm1), [zmm2] "=&x"(zmm2),
+	  [zmm3] "=&x"(zmm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
 	  [off] "+&r"(off), [r0] "+&r"(r0), [jmp_ptr] "+&r"(jmp_ptr)
 	:
 	: "memory");
