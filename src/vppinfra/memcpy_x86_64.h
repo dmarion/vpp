@@ -561,7 +561,6 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 */
 	"lea		-0x20(%[r0],%[n]), %[r0]	\n\t"
 	"mov		%[r0], %[n]			\n\t"
-	"and		$0xf0, %[n]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
 	"add		%[off], %[r0]			\n\t"
 
@@ -608,8 +607,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"jne		.L_more_%=			\n\t"
 
 	/* check if there is more bytes to copy (256 > n > 0) */
-	"test		%[n], %[n]			\n\t"
-	"je		.L_done_%=			\n\t"
+	"and		$0xf0, %[n]			\n\t"
+	"jz		.L_done_%=			\n\t"
 
 	/* unaligned move with base, offset and 32 bit
 	 * displacement takes 9 bytes so we need to jump back 18 bytes
