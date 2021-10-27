@@ -399,10 +399,9 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"vmovdqu8	%[zmm0], -0x200(%[dst],%[off])	\n\t"
 	".L_done_%=:				\n\t"
 
-	: [zmm0] "=&x"(zmm0), [zmm1] "=&x"(zmm1), [zmm2] "=&x"(zmm2), [zmm3] "=&x"(zmm3),
-	  [dst] "+D"(d),
-	  [src] "+S"(s), [n] "+r"(n), [off] "+&r"(off), [r0] "+&r"(r0),
-	  [jmp_ptr] "+&r"(jmp_ptr)
+	: [zmm0] "=&x"(zmm0), [zmm1] "=&x"(zmm1), [zmm2] "=&x"(zmm2),
+	  [zmm3] "=&x"(zmm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
+	  [off] "+&r"(off), [r0] "+&r"(r0), [jmp_ptr] "+&r"(jmp_ptr)
 	:
 	: "memory");
 
