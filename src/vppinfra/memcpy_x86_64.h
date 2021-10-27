@@ -425,8 +425,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"cmp		$0x60,%[n]			\n\t"
 	"jbe		.L_only_one_%=			\n\t"
 
-	/* if n < (256 + 32) skip main loop */
-	"cmp		$0x11f, %[n]			\n\t"
+	/* if n =< (256 + 32) skip main loop */
+	"cmp		$0x120, %[n]			\n\t"
 	"jbe		.L_skip_main_%=			\n\t"
 
 	/* align dst pointer */
@@ -480,9 +480,10 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	/* n = ((c - 32) / 32) * 18 */
 	".L_skip_main_%=:				\n\t"
-	"shr		$5, %[n]			\n\t"
-	"lea		-9(%[n],%[n],8), %[n]		\n\t"
-	"shl		$1, %[n]			\n\t"
+	"sub		$33, %[n]			\n\t"
+	"and		$0xe0, %[n]			\n\t"
+	"shr		$4, %[n]			\n\t"
+	"lea		(%[n],%[n],8), %[n]		\n\t"
 	"sub		%[n], %[jmp_ptr]		\n\t"
 	"jmp		*%[jmp_ptr]			\n\t"
 
@@ -526,7 +527,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	/* do a bit of work in parallel with loads/stores
 	 *  initial offset is 256 + 32
 	 *  32 bytes are already copied
-	 *  256 is used to force 16-bit displacement of vmovdqu
+	 *  256 is used to force 32-bit displacement of vmovdqu
 	 *  bellow so all load/stores at the end are 9-byte long
 	 */
 	"mov		$0x220, %k[off]			\n\t"
@@ -546,8 +547,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"cmp		$0x60,%[n]			\n\t"
 	"jbe		.L_only_two_%=			\n\t"
 
-	/* if n < (256 + 32) skip main loop */
-	"cmp		$0x11f, %[n]			\n\t"
+	/* if n < (256 + 48) skip main loop */
+	"cmp		$0x130, %[n]			\n\t"
 	"jbe		.L_skip_main_%=			\n\t"
 
 	/* align dst pointer */
@@ -559,8 +560,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * r0 - loop exit value
 	 * n  - nomber of bytes to copy in the last round
 	 */
-	"lea		-0x20(%[r0],%[n]), %[r0]	\n\t"
-	"mov		%[r0], %[n]			\n\t"
+	"lea		-49(%[r0],%[n]), %[n]		\n\t"
+	"mov		%[n], %[r0]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
 	"add		%[off], %[r0]			\n\t"
 
@@ -621,9 +622,10 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	/* n = ((c - 32) / 16) * 18 */
 	".L_skip_main_%=:				\n\t"
-	"shr		$4, %[n]			\n\t"
-	"lea		-18(%[n],%[n],8), %[n]		\n\t"
-	"shl		$1, %[n]			\n\t"
+	"sub		$49, %[n]			\n\t"
+	"and		$0xf0, %[n]			\n\t"
+	"shr		$3, %[n]			\n\t"
+	"lea		(%[n],%[n],8), %[n]		\n\t"
 	"sub		%[n], %[jmp_ptr]		\n\t"
 	"jmp		*%[jmp_ptr]			\n\t"
 
