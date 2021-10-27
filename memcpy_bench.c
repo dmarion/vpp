@@ -2,6 +2,7 @@
 #include <vppinfra/vector.h>
 #include <vppinfra/string.h>
 #include <vppinfra/random.h>
+#include <vppinfra/vector/array_mask.h>
 //#include <iacaMarks.h>
 #include "tscmarks.h"
 #include <sys/mman.h>
@@ -56,6 +57,11 @@ VER_FN (ver4) (u8 *dst, const u8 *src, size_t n)
   __builtin_memcpy (dst, src, 35);
 }
 
+void __clib_noinline __clib_section (".ver5")
+VER_FN (ver5) (u8 *dst, const u8 *src, size_t n)
+{
+  clib_array_mask_u32 ((u32 *) src, (u64) dst, n);
+}
 #ifndef VER
 
 typedef void (test_fn_t) (u8 *dst, const u8 *src, size_t n);
