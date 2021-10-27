@@ -323,8 +323,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"cmp		$0xc0,%[n]			\n\t"
 	"jbe		.L_only_one_%=			\n\t"
 
-	/* if n < (256 + 64) skip main loop */
-	"cmp		$0x13f, %[n]			\n\t"
+	/* if n =< (256 + 64) skip main loop */
+	"cmp		$0x140, %[n]			\n\t"
 	"jbe		.L_skip_main_%=			\n\t"
 
 	/* align dst pointer */
@@ -336,9 +336,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * r0 - loop exit value
 	 * n  - nomber of bytes to copy in the last round
 	 */
-	"lea		-0x40(%[r0],%[n]), %[r0]	\n\t"
-	"mov		%[r0], %[n]			\n\t"
-	"and		$0xe0, %[n]			\n\t"
+	"lea		-33(%[r0], %[n]), %[n]		\n\t"
+	"mov		%[n], %[r0]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
 	"add		%[off], %[r0]			\n\t"
 
@@ -357,7 +356,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"jne		.L_more_%=			\n\t"
 
 	/* check if there is more bytes to copy (256 > n > 0) */
-	"test		%[n], %[n]			\n\t"
+	"and		$0xc0, %[n]			\n\t"
 	"je		.L_done_%=			\n\t"
 
 	/* VEX encoded unaligned move with base, offset and 32 bit
@@ -371,9 +370,9 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	/* n = ((c - 32) / 32) * 18 */
 	".L_skip_main_%=:				\n\t"
-	"sub		$0x40, %[n]			\n\t"
-	"shr		$6, %[n]			\n\t"
-	"shl		$4, %[n]			\n\t"
+	"sub		$65, %[n]			\n\t"
+	"and		$0xc0, %[n]			\n\t"
+	"shr		$2, %[n]			\n\t"
 	"sub		%[n], %[jmp_ptr]		\n\t"
 	"jmp		*%[jmp_ptr]			\n\t"
 
@@ -430,15 +429,15 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"jbe		.L_skip_main_%=			\n\t"
 
 	/* align dst pointer */
-	"mov		%[dst], %[r1]			\n\t"
-	"and		$0x1f, %[r1]			\n\t"
-	"sub		%[r1], %[off]			\n\t"
+	"mov		%[dst], %[r0]			\n\t"
+	"and		$0x1f, %[r0]			\n\t"
+	"sub		%[r0], %[off]			\n\t"
 
 	/* loop preparation
 	 * r0 - loop exit value
 	 * n  - nomber of bytes to copy in the last round
 	 */
-	"lea		-33(%[r1], %[n]), %[n]		\n\t"
+	"lea		-33(%[r0], %[n]), %[n]		\n\t"
 	"mov		%[n], %[r0]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
 	"add		%[off], %[r0]			\n\t"
