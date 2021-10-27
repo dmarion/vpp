@@ -438,7 +438,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * r0 - loop exit value
 	 * n  - nomber of bytes to copy in the last round
 	 */
-	"lea		-0x20(%[r0],%[n]), %[r0]	\n\t"
+	"lea		-0x20(%[r1],%[n]), %[r0]	\n\t"
 	"mov		%[r0], %[n]			\n\t"
 	"and		$0xe0, %[n]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
