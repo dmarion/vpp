@@ -295,8 +295,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
     {
       u8x64  zmm0, zmm1;
       u64 off, r0, jmp_ptr;
-      if (n > 319)
-	return __builtin_memcpy (dst, src, n);
+      if (n > 700)
+        return __builtin_memcpy (dst, src, n);
       asm volatile(
 	/* copy first 32 bytes */
 	"vmovdqu8	(%[src]), %[zmm0]		\n\t"
@@ -323,8 +323,8 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"cmp		$0xc0,%[n]			\n\t"
 	"jbe		.L_only_one_%=			\n\t"
 
-	/* if n =< (256 + 64) skip main loop */
-	"cmp		$0x140, %[n]			\n\t"
+	/* if n =< (512 + 64) skip main loop */
+	"cmp		$0x240, %[n]			\n\t"
 	"jbe		.L_skip_main_%=			\n\t"
 
 	/* align dst pointer */
@@ -336,9 +336,9 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	 * r0 - loop exit value
 	 * n  - nomber of bytes to copy in the last round
 	 */
-	"lea		-33(%[r0], %[n]), %[n]		\n\t"
+	"lea		-65(%[r0], %[n]), %[n]		\n\t"
 	"mov		%[n], %[r0]			\n\t"
-	"xor		%b[r0], %b[r0]			\n\t"
+	"and		$-512, %[r0]			\n\t"
 	"add		%[off], %[r0]			\n\t"
 
 	/* main 256-byte copy loop */
@@ -356,26 +356,33 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"jne		.L_more_%=			\n\t"
 
 	/* check if there is more bytes to copy (256 > n > 0) */
-	"and		$0xc0, %[n]			\n\t"
+	"and		$0x1c0, %[n]			\n\t"
 	"je		.L_done_%=			\n\t"
 
 	/* VEX encoded unaligned move with base, offset and 32 bit
 	 * displacement takes 9 bytes so we need to jump back 18 bytes
 	 * for each 32-byte load/store needed
 	 */
-	"shr		$4, %[n]			\n\t"
-	"lea		(%[n],%[n],8), %[n]		\n\t"
+	"shr		$2, %[n]			\n\t"
 	"sub		%[n], %[jmp_ptr]		\n\t"
 	"jmp		*%[jmp_ptr]			\n\t"
 
 	/* n = ((c - 32) / 32) * 18 */
 	".L_skip_main_%=:				\n\t"
 	"sub		$65, %[n]			\n\t"
-	"and		$0xc0, %[n]			\n\t"
+	"and		$0x1c0, %[n]			\n\t"
 	"shr		$2, %[n]			\n\t"
 	"sub		%[n], %[jmp_ptr]		\n\t"
 	"jmp		*%[jmp_ptr]			\n\t"
 
+	"vmovdqu8	-0x080(%[src],%[off]), %[zmm0]	\n\t"
+	"vmovdqu8	%[zmm0], -0x080(%[dst],%[off])	\n\t"
+	"vmovdqu8	-0x0c0(%[src],%[off]), %[zmm0]	\n\t"
+	"vmovdqu8	%[zmm0], -0x0c0(%[dst],%[off])	\n\t"
+	"vmovdqu8	-0x100(%[src],%[off]), %[zmm0]	\n\t"
+	"vmovdqu8	%[zmm0], -0x100(%[dst],%[off])	\n\t"
+	"vmovdqu8	-0x140(%[src],%[off]), %[zmm0]	\n\t"
+	"vmovdqu8	%[zmm0], -0x140(%[dst],%[off])	\n\t"
 	"vmovdqu8	-0x180(%[src],%[off]), %[zmm0]	\n\t"
 	"vmovdqu8	%[zmm0], -0x180(%[dst],%[off])	\n\t"
 	"vmovdqu8	-0x1c0(%[src],%[off]), %[zmm0]	\n\t"
