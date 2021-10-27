@@ -556,13 +556,16 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"and		$0x0f, %[r0]			\n\t"
 	"sub		%[r0], %[off]			\n\t"
 
-	/* loop preparation
-	 * r0 - loop exit value
-	 * n  - nomber of bytes to copy in the last round
-	 */
+	/* round n to number of lods/stores left
+	 * n = (n - 64 + (16 - 1)) & ~0x0f */
 	"lea		-49(%[r0],%[n]), %[n]		\n\t"
+
+	/* number of bytes to be copied in the main loop
+	 * r0 = n & ~0xff */
 	"mov		%[n], %[r0]			\n\t"
 	"xor		%b[r0], %b[r0]			\n\t"
+
+	/* main loop exit value r0 = r0 + off */
 	"add		%[off], %[r0]			\n\t"
 
 	/* main 256-byte copy loop */
