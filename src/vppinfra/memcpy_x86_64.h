@@ -398,7 +398,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
   if (1)
     {
       u8x32 ymm0, ymm1, ymm2, ymm3;
-      u64 off, r0, jmp_ptr;
+      u64 off, r0, r1, jmp_ptr;
       asm volatile(
 	/* copy first 32 bytes */
 	"vmovdqu	(%[src]), %[ymm0]		\n\t"
@@ -430,9 +430,9 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"jbe		.L_skip_main_%=			\n\t"
 
 	/* align dst pointer */
-	"mov		%[dst], %[r0]			\n\t"
-	"and		$0x1f, %[r0]			\n\t"
-	"sub		%[r0], %[off]			\n\t"
+	"mov		%[dst], %[r1]			\n\t"
+	"and		$0x1f, %[r1]			\n\t"
+	"sub		%[r1], %[off]			\n\t"
 
 	/* loop preparation
 	 * r0 - loop exit value
@@ -506,7 +506,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 
 	: [ymm0] "=&x"(ymm0), [ymm1] "=&x"(ymm1), [ymm2] "=&x"(ymm2),
 	  [ymm3] "=&x"(ymm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
-	  [off] "+&r"(off), [r0] "+&r"(r0), [jmp_ptr] "+&r"(jmp_ptr)
+	  [off] "+&r"(off), [r0] "+&r"(r0), [jmp_ptr] "+&r"(jmp_ptr), [r1] "+&r"(r1)
 	:
 	: "memory");
 
