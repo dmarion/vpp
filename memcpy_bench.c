@@ -161,7 +161,7 @@ next:
 
   while (1)
     {
-#if 1
+#if 0
       tsc_mark ("old trm gcc");
       test_exec (ver2_trm_gcc, b, a);
       tsc_mark ("new trm gcc");
@@ -172,7 +172,7 @@ next:
       test_exec (ver1_trm_clang, b, a);
 #endif
 
-#if 1
+#if 0
       tsc_mark ("old hsw gcc");
       test_exec (ver2_hsw_gcc, b, a);
       tsc_mark ("new hsw gcc");
@@ -189,6 +189,8 @@ next:
       test_exec (ver2_skx_clang, b, a);
       tsc_mark ("new skx clang");
       test_exec (ver1_skx_clang, b, a);
+      tsc_mark ("rep movsb gcc");
+      test_exec (ver3_icx_gcc, b, a);
 #else
       tsc_mark ("new icx gcc");
       test_exec (ver1_icx_gcc, b, a);
@@ -206,8 +208,6 @@ next:
       test_exec (ver1_icx_clang, b, a);
       tsc_mark ("old icx clang");
       test_exec (ver2_icx_clang, b, a);
-      tsc_mark ("rep movsb gcc");
-      test_exec (ver3_icx_gcc, b, a);
 #endif
 
       tsc_mark (0);
