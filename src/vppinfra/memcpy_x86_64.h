@@ -293,7 +293,7 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 #ifdef CLIB_HAVE_VEC512
   if (1)
     {
-      u8x64  zmm0, zmm1, zmm2, zmm3;
+      u8x64  zmm0, zmm1;
       u64 off, r0, jmp_ptr;
       if (n > 319)
 	return __builtin_memcpy (dst, src, n);
@@ -345,13 +345,13 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	/* main 256-byte copy loop */
 	".L_more_%=:					\n\t"
 	"vmovdqu8	-0x200(%[src],%[off]), %[zmm0]	\n\t"
-	"vmovdqu8	-0x1c0(%[src],%[off]), %[zmm2]	\n\t"
+	"vmovdqu8	-0x1c0(%[src],%[off]), %[zmm1]	\n\t"
 	"vmovdqu64	%[zmm0], -0x200(%[dst],%[off])	\n\t"
-	"vmovdqu64	%[zmm2], -0x1c0(%[dst],%[off])	\n\t"
+	"vmovdqu64	%[zmm1], -0x1c0(%[dst],%[off])	\n\t"
 	"vmovdqu8	-0x180(%[src],%[off]), %[zmm0]	\n\t"
-	"vmovdqu8	-0x140(%[src],%[off]), %[zmm2]	\n\t"
+	"vmovdqu8	-0x140(%[src],%[off]), %[zmm1]	\n\t"
 	"vmovdqu64	%[zmm0], -0x180(%[dst],%[off])	\n\t"
-	"vmovdqu64	%[zmm2], -0x140(%[dst],%[off])	\n\t"
+	"vmovdqu64	%[zmm1], -0x140(%[dst],%[off])	\n\t"
 	"add		$0x100, %[off]			\n\t"
 	"cmp		%[r0], %[off]			\n\t"
 	"jne		.L_more_%=			\n\t"
@@ -386,9 +386,9 @@ clib_memcpy_x86_64 (void *restrict dst, const void *restrict src, size_t n)
 	"vmovdqu8	%[zmm0], -0x200(%[dst],%[off])	\n\t"
 	".L_done_%=:				\n\t"
 
-	: [zmm0] "=&x"(zmm0), [zmm1] "=&x"(zmm1), [zmm2] "=&x"(zmm2),
-	  [zmm3] "=&x"(zmm3), [dst] "+D"(d), [src] "+S"(s), [n] "+r"(n),
-	  [off] "+&r"(off), [r0] "+&r"(r0), [jmp_ptr] "+&r"(jmp_ptr)
+	: [zmm0] "=&x"(zmm0), [zmm1] "=&x"(zmm1), [dst] "+D"(d),
+	  [src] "+S"(s), [n] "+r"(n), [off] "+&r"(off), [r0] "+&r"(r0),
+	  [jmp_ptr] "+&r"(jmp_ptr)
 	:
 	: "memory");
 
