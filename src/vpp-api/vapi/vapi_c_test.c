@@ -503,7 +503,7 @@ START_TEST (test_loopbacks_1)
   for (i = 0; i < num_ifs; ++i)
     {
       vapi_msg_create_loopback *cl = vapi_alloc_create_loopback (ctx);
-      memcpy (cl->payload.mac_address, mac_addresses[i],
+      clib_memcpy (cl->payload.mac_address, mac_addresses[i],
 	      sizeof (cl->payload.mac_address));
       vapi_error_e rv =
 	vapi_create_loopback (ctx, cl, loopback_create_cb, &clcs[i]);
@@ -656,7 +656,7 @@ START_TEST (test_loopbacks_2)
   for (i = 0; i < num_ifs; ++i)
     {
       vapi_msg_create_loopback *cl = vapi_alloc_create_loopback (ctx);
-      memcpy (cl->payload.mac_address, mac_addresses[i],
+      clib_memcpy (cl->payload.mac_address, mac_addresses[i],
 	      sizeof (cl->payload.mac_address));
       while (VAPI_EAGAIN ==
 	     (rv =

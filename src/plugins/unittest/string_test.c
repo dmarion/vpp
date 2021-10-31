@@ -576,8 +576,8 @@ test_strcpy_s (vlib_main_t * vm, unformat_input_t * input)
 static int
 test_clib_strcpy (vlib_main_t * vm, unformat_input_t * input)
 {
-  char src[] = "The journey of a one thousand miles begins with one step.";
-  char dst[100];
+  char src[4096] = "The journey of a one thousand miles begins with one step.";
+  char dst[4096];
   int indicator;
   errno_t err;
 
@@ -906,7 +906,7 @@ test_strcat_s (vlib_main_t * vm, unformat_input_t * input)
 static int
 test_clib_strcat (vlib_main_t * vm, unformat_input_t * input)
 {
-  char src[100], dst[100], old_dst[100];
+  char src[4096], dst[4096], old_dst[4096];
   size_t s1size = sizeof (dst);	// including null
   errno_t err;
   int indicator;
@@ -1098,7 +1098,7 @@ test_strncat_s (vlib_main_t * vm, unformat_input_t * input)
 static int
 test_clib_strncat (vlib_main_t * vm, unformat_input_t * input)
 {
-  char src[100], dst[100], old_dst[100];
+  char src[4096], dst[4096], old_dst[4096];
   size_t s1size = sizeof (dst);	// including null
   errno_t err;
   char s1[] = "Two things are infinite: ";
@@ -1544,7 +1544,7 @@ static int
 test_clib_strstr (vlib_main_t * vm, unformat_input_t * input)
 {
   char *sub, *s;
-  char s1[64];
+  char s1[4096];
   size_t s1len = sizeof (s1) - 1;	// excluding null
   int indicator;
 
