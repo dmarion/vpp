@@ -70,6 +70,8 @@ add_vpp_library(vlib
   buffer_funcs.c
   cli.c
   counter.c
+  dma/cli.c
+  dma/dma.c
   drop.c
   error.c
   format.c
@@ -113,6 +115,7 @@ add_vpp_library(vlib
   counter.h
   counter_types.h
   defs.h
+  dma/dma.h
   error_funcs.h
   error.h
   format_funcs.h

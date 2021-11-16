@@ -1,0 +1,11 @@
+#!/bin/env bash
+ac=~/idxd-config/accfg/accel-config
+
+sudo ${ac} config-engine dsa0/engine0.0 --group-id=0
+sudo ${ac} config-wq dsa0/wq0.0 --group-id=0 \
+           --mode=dedicated --priority=10 --wq-size=8 \
+           --type=user --name=vpp1
+sudo ${ac} enable-device dsa0
+sudo ${ac} enable-wq dsa0/wq0.0
+sudo ${ac} list
+sudo chown $(whoami) /dev/dsa/wq0.0
