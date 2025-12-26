@@ -94,10 +94,10 @@ vnet_dev_config_driver_args (vlib_main_t *vm, unformat_input_t *input,
 	  if (driver_name[0] &&
 	      strcmp (driver_name, driver->registration->name))
 	    continue;
-	  if (driver->registration->drv_args)
+	  if (driver->registration->driver.args)
 	    {
 	      clib_args_free (driver->args);
-	      driver->args = clib_args_init (driver->registration->drv_args);
+	      driver->args = clib_args_init (driver->registration->driver.args);
 
 	      if (args)
 		{

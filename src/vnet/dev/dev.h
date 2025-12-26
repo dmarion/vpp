@@ -472,7 +472,10 @@ struct vnet_dev_driver_registration
   int priority;
   vnet_dev_ops_t ops;
   clib_arg_t *args;
-  clib_arg_t *drv_args;
+  struct {
+    clib_arg_t *args;
+    vnet_dev_drv_op_t *init;
+  } driver;
 };
 
 typedef struct
