@@ -130,7 +130,7 @@ jobs:
       # starts the deferred verification.
       - name: Series gate
         id: gate
-        uses: fdio/vpp/.github/actions/vpp-gerrit-series-gate@master  # TODO: pin to SHA once the action is merged
+        uses: dmarion/vpp/.github/actions/vpp-gerrit-series-gate@master  # TODO: pin to SHA once the action is merged
         with:
           GERRIT_PROJECT: ${{ inputs.GERRIT_PROJECT }}
           GERRIT_CHANGE_NUMBER: ${{ inputs.GERRIT_CHANGE_NUMBER }}
@@ -438,7 +438,7 @@ jobs:
       actions: write   # needed to dispatch gerrit-verify for dependent changes
     steps:
       - name: Verify changes based on this one
-        uses: fdio/vpp/.github/actions/vpp-gerrit-dispatch-dependents@master  # TODO: pin to SHA once the action is merged
+        uses: dmarion/vpp/.github/actions/vpp-gerrit-dispatch-dependents@master  # TODO: pin to SHA once the action is merged
         with:
           GERRIT_PROJECT: ${{ inputs.GERRIT_PROJECT }}
           GERRIT_CHANGE_NUMBER: ${{ inputs.GERRIT_CHANGE_NUMBER }}

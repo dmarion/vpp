@@ -1,0 +1,52 @@
+---
+name: test-series-gate
+run-name: "test-series-gate ${{ inputs.GERRIT_CHANGE_NUMBER }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      GERRIT_CHANGE_NUMBER:
+        description: "Gerrit change number"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Look up change
+        id: info
+        run: |
+          set -euo pipefail
+          c=$(curl -fsS -A fdio-vpp-ci \
+            "https://gerrit.fd.io/r/changes/vpp~${{ inputs.GERRIT_CHANGE_NUMBER }}?o=CURRENT_REVISION" | tail -n +2)
+          echo "rev=$(echo "$c" | python3 -c 'import json,sys;print(json.load(sys.stdin)["current_revision"])')" >> "$GITHUB_OUTPUT"
+
+      - name: Series gate
+        id: gate
+        uses: dmarion/vpp/.github/actions/vpp-gerrit-series-gate@master
+        with:
+          GERRIT_PROJECT: vpp
+          GERRIT_CHANGE_NUMBER: ${{ inputs.GERRIT_CHANGE_NUMBER }}
+          GERRIT_PATCHSET_REVISION: ${{ steps.info.outputs.rev }}
+
+      - name: Gate result
+        run: |
+          {
+            echo "### Series gate for change ${{ inputs.GERRIT_CHANGE_NUMBER }}"
+            echo "- proceed: \`${{ steps.gate.outputs.proceed }}\`"
+            echo "- message: ${{ steps.gate.outputs.message }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dispatch dependents (dry run)
+        uses: dmarion/vpp/.github/actions/vpp-gerrit-dispatch-dependents@master
+        with:
+          GERRIT_PROJECT: vpp
+          GERRIT_CHANGE_NUMBER: ${{ inputs.GERRIT_CHANGE_NUMBER }}
+          GERRIT_PATCHSET_REVISION: ${{ steps.info.outputs.rev }}
+          REF: ${{ github.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DRY_RUN: "true"

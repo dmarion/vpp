@@ -42,6 +42,11 @@ inputs:
     description: "Token with actions: write permission"
     required: true
     type: string
+  DRY_RUN:
+    description: "'true' to only print what would be dispatched"
+    required: false
+    default: "false"
+    type: string
 
 runs:
   using: "composite"
@@ -57,6 +62,7 @@ runs:
         WORKFLOW: ${{ inputs.WORKFLOW }}
         REF: ${{ inputs.REF }}
         GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+        DRY_RUN: ${{ inputs.DRY_RUN }}
         GITHUB_API_URL: ${{ github.api_url }}
         GITHUB_REPOSITORY: ${{ github.repository }}
       run: |
@@ -79,6 +85,9 @@ runs:
             return json.loads(body.split("\n", 1)[1])
 
         def dispatch(inputs):
+            if os.environ.get("DRY_RUN") == "true":
+                print("DRY RUN, would dispatch:", json.dumps(inputs))
+                return
             api = (f"{os.environ['GITHUB_API_URL']}/repos/"
                    f"{os.environ['GITHUB_REPOSITORY']}/actions/workflows/"
                    f"{os.environ['WORKFLOW']}/dispatches")
